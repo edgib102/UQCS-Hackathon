@@ -1,5 +1,8 @@
-import { init3DScene, update3DScene } from './pose3d.js';
-import { updateRepCounter } from './posedata.js';
+import { updatePose, repCount, squatDepthReached } from './posedata.js';  // import updater + state
+
+window.onload = () => {
+  getPose();
+};
 
 // Kalman Filter for a single landmark point (x, y, z coordinates)
 class KalmanFilter {
