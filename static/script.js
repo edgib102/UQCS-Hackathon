@@ -25,29 +25,35 @@
     detectFrame(video1, pose1);
     detectFrame(video2, pose2);
 };
+async function initCameras() {
+  // Request permission for all devices first
+  await navigator.mediaDevices.getUserMedia({ video: true });
 
-    async function initCameras() {
-      const devices = await navigator.mediaDevices.enumerateDevices();
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  console.log(devices);
 
-      console.log(devices)
-      // Filter only video inputs that are not IR
-      const videoDevices = devices.filter(d => 
-        d.kind === 'videoinput' && 
-        !d.label.toLowerCase().includes('ir')
-      );
+  const videoDevices = devices.filter(d => 
+    d.kind === 'videoinput' && 
+    !d.label.toLowerCase().includes('ir')
+  );
 
-      if (videoDevices.length < 2) {
-        throw new Error(`Need at least 2 RGB cameras, but found ${videoDevices.length}`);
-      }
+  if (videoDevices.length < 2) {
+    throw new Error(`Need at least 2 RGB cameras, but found ${videoDevices.length}`);
+  }
 
-      const video1 = document.getElementById('webcam1');
-      const video2 = document.getElementById('webcam2');
+  const video1 = document.getElementById('webcam1');
+  const video2 = document.getElementById('webcam2');
 
-      video1.srcObject = await navigator.mediaDevices.getUserMedia({ video: { deviceId: videoDevices[0].deviceId } });
-      video2.srcObject = await navigator.mediaDevices.getUserMedia({ video: { deviceId: videoDevices[1].deviceId } });
+  // Use exact deviceId to lock to that camera
+  video1.srcObject = await navigator.mediaDevices.getUserMedia({
+    video: { deviceId: { exact: videoDevices[0].deviceId } }
+  });
+  video2.srcObject = await navigator.mediaDevices.getUserMedia({
+    video: { deviceId: { exact: videoDevices[1].deviceId } }
+  });
 
-      return [video1, video2];
-    }
+  return [video1, video2];
+}
 
     function detectFrame(video, pose) {
       async function frame() {
