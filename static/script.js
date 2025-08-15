@@ -29,6 +29,7 @@
     async function initCameras() {
       const devices = await navigator.mediaDevices.enumerateDevices();
 
+      print(devices)
       // Filter only video inputs that are not IR
       const videoDevices = devices.filter(d => 
         d.kind === 'videoinput' && 
