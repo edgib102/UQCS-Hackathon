@@ -7,11 +7,15 @@
     <link rel="stylesheet" href="static\style.css">
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.1/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-    <script src="/static/script.js"></script>
+
+    <script src="/static/script.js" type="module"></script>
+    <script src="/static/posedata.js" type="module"></script>
 </head>
 <body>
-    <div class="test">
-        <h1>fhfhfh</h1>
+    <div class="video-wrapper">
+        <video id="webcam" autoplay playsinline></video>
+        <canvas id="output"></canvas>        
     </div>
+
 </body>
 </html>
