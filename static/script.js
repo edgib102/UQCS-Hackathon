@@ -11,7 +11,8 @@ const canvas2 = document.getElementById('output2');
  * Initializes and returns all available video camera elements.
  */
 async function initCameras() {
-    await navigator.mediaDevices.getUserMedia({ video: true }); // Request permission
+    // First, get user permission and a list of all devices.
+    await navigator.mediaDevices.getUserMedia({ video: true });
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter(d => d.kind === 'videoinput' && !d.label.toLowerCase().includes('ir'));
 
@@ -19,27 +20,35 @@ async function initCameras() {
         throw new Error("No RGB cameras found.");
     }
 
+    // Create a list of promises to get a stream from each camera we want.
+    // We'll take the first two devices found.
+    const streamPromises = videoDevices.slice(0, 2).map(device =>
+        navigator.mediaDevices.getUserMedia({
+            video: { deviceId: { exact: device.deviceId } }
+        })
+    );
+
+    // Await all streams concurrently. This is the key change.
+    const streams = await Promise.all(streamPromises);
+
     const videoElements = [];
 
-    // Setup Camera 1
-    video1.srcObject = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: { exact: videoDevices[0].deviceId } }
-    });
-    videoElements.push(video1);
+    // Assign the first stream to the first video element.
+    if (streams.length > 0) {
+        video1.srcObject = streams[0];
+        videoElements.push(video1);
+    }
 
-    // Setup Camera 2 if it exists
-    if (videoDevices.length > 1) {
+    // If a second stream was successfully acquired, assign it.
+    if (streams.length > 1) {
         video2.style.display = 'block';
         canvas2.style.display = 'block';
-        video2.srcObject = await navigator.mediaDevices.getUserMedia({
-            video: { deviceId: { exact: videoDevices[1].deviceId } }
-        });
+        video2.srcObject = streams[1];
         videoElements.push(video2);
     }
 
     return videoElements;
 }
-
 /**
  * Renders the pose detection results onto a 2D canvas.
  */
