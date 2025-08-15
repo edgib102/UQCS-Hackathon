@@ -9,7 +9,7 @@ export let repState = 'STANDING';      // FSM: STANDING, DESCENDING, BOTTOM, ASC
 // ---- Thresholds (tweak for camera distance / user height) ----
 const STANDING_THRESHOLD = 160;        // angle above which we consider user standing
 const BOTTOM_THRESHOLD = 100;           // angle below which we consider squat bottom
-const KNEE_VISIBILITY_THRESHOLD = 0.5; // minimum visibility to count knee
+const KNEE_VISIBILITY_THRESHOLD = 0.2; // minimum visibility to count knee
 
 // ---- Main pose update function ----
 export function updatePose(results) {
@@ -22,7 +22,7 @@ export function updatePose(results) {
   const rightKneeLandmark = landmarks[26];
 
   // Skip if either knee is not visible enough
-  if (leftKneeLandmark.visibility < KNEE_VISIBILITY_THRESHOLD || 
+  if (leftKneeLandmark.visibility < KNEE_VISIBILITY_THRESHOLD && 
       rightKneeLandmark.visibility < KNEE_VISIBILITY_THRESHOLD) {
     console.log('Knee(s) not visible, skipping rep detection');
     return;
