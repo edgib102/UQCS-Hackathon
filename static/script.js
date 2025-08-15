@@ -19,7 +19,7 @@
     pose1.setOptions({ modelComplexity: 2, smoothLandmarks: true, minDetectionConfidence: 0.75, minTrackingConfidence: 0.75 });
     pose2.setOptions({ modelComplexity: 2, smoothLandmarks: true, minDetectionConfidence: 0.75, minTrackingConfidence: 0.75 });
 
-    pose1.onResults(results => renderResults(aresults, 'output1'));
+    pose1.onResults(results => renderResults(results, 'output1'));
     pose2.onResults(results => renderResults(results, 'output2'));
 
     detectFrame(video1, pose1);
