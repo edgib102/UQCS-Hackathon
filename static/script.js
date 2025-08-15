@@ -20,6 +20,8 @@ window.onload = async () => {
       minTrackingConfidence: 0.75
     });
     pose.onResults(results => renderResults(results, `output${i + 1}`));
+
+    // Start continuous frame sending
     detectFrame(videos[i], pose);
   });
 };
@@ -31,7 +33,7 @@ async function initCameras() {
   const devices = await navigator.mediaDevices.enumerateDevices();
   const videoDevices = devices.filter(d =>
     d.kind === 'videoinput' &&
-    !d.label.toLowerCase().includes('ir')
+    !d.label.toLowerCase().includes('ir') // ignore infrared cams
   );
 
   if (videoDevices.length === 0) {
@@ -42,17 +44,25 @@ async function initCameras() {
 
   // Webcam 1
   const video1 = document.getElementById('webcam1');
+  video1.autoplay = true;
+  video1.muted = true;
+  video1.playsInline = true;
   video1.srcObject = await navigator.mediaDevices.getUserMedia({
     video: { deviceId: { exact: videoDevices[0].deviceId } }
   });
+  await video1.play();
   videoElements.push(video1);
 
   // Webcam 2 (optional)
   if (videoDevices.length > 1) {
     const video2 = document.getElementById('webcam2');
+    video2.autoplay = true;
+    video2.muted = true;
+    video2.playsInline = true;
     video2.srcObject = await navigator.mediaDevices.getUserMedia({
       video: { deviceId: { exact: videoDevices[1].deviceId } }
     });
+    await video2.play();
     videoElements.push(video2);
   }
 
@@ -61,17 +71,22 @@ async function initCameras() {
 
 function detectFrame(video, pose) {
   async function frame() {
-    await pose.send({ image: video });
+    if (video.readyState >= 2) { // HAVE_CURRENT_DATA or better
+      await pose.send({ image: video });
+    }
     requestAnimationFrame(frame);
   }
-  video.onloadeddata = frame;
+  frame(); // Start immediately
 }
 
 function renderResults(results, canvasId) {
   const canvas = document.getElementById(canvasId);
-  if (!canvas) return; // In case second canvas doesn't exist
+  if (!canvas) return;
 
   const ctx = canvas.getContext('2d');
+  canvas.width = results.image.width;
+  canvas.height = results.image.height;
+
   ctx.save();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
