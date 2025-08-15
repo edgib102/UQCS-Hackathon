@@ -1,18 +1,36 @@
+ async function countCameras() {
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const videoDevices = devices.filter(device => device.kind === 'videoinput');
+  console.log(`Number of cameras connected: ${videoDevices.length}`);
+  return videoDevices.length;
+}
+
+ 
+ 
  window.onload = async () => {
-      const [video1, video2] = await initCameras();
 
-      const pose1 = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
-      const pose2 = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+    const numCameras = await countCameras();
 
-      pose1.setOptions({ modelComplexity: 2, smoothLandmarks: true, minDetectionConfidence: 0.75, minTrackingConfidence: 0.75 });
-      pose2.setOptions({ modelComplexity: 2, smoothLandmarks: true, minDetectionConfidence: 0.75, minTrackingConfidence: 0.75 });
+    // Optional: alert the user if fewer than 2 cameras are connected
+    if (numCameras < 2) {
+      alert('You need at least 2 cameras for this setup!');
+    }
 
-      pose1.onResults(results => renderResults(aresults, 'output1'));
-      pose2.onResults(results => renderResults(results, 'output2'));
+  
+    const [video1, video2] = await initCameras();
 
-      detectFrame(video1, pose1);
-      detectFrame(video2, pose2);
-    };
+    const pose1 = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+    const pose2 = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+
+    pose1.setOptions({ modelComplexity: 2, smoothLandmarks: true, minDetectionConfidence: 0.75, minTrackingConfidence: 0.75 });
+    pose2.setOptions({ modelComplexity: 2, smoothLandmarks: true, minDetectionConfidence: 0.75, minTrackingConfidence: 0.75 });
+
+    pose1.onResults(results => renderResults(aresults, 'output1'));
+    pose2.onResults(results => renderResults(results, 'output2'));
+
+    detectFrame(video1, pose1);
+    detectFrame(video2, pose2);
+};
 
     async function initCameras() {
       const devices = await navigator.mediaDevices.enumerateDevices();
