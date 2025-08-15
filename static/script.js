@@ -1,80 +1,85 @@
- async function countCameras() {
+async function countCameras() {
   const devices = await navigator.mediaDevices.enumerateDevices();
   const videoDevices = devices.filter(device => device.kind === 'videoinput');
   console.log(`Number of cameras connected: ${videoDevices.length}`);
   return videoDevices.length;
 }
 
- 
- 
- window.onload = async () => {
+window.onload = async () => {
+  const videos = await initCameras();
 
+  const poseInstances = videos.map(() =>
+    new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` })
+  );
 
-  
-    const [video1, video2] = await initCameras();
-
-    const pose1 = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
-    const pose2 = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
-
-    pose1.setOptions({ modelComplexity: 2, smoothLandmarks: true, minDetectionConfidence: 0.75, minTrackingConfidence: 0.75 });
-    pose2.setOptions({ modelComplexity: 2, smoothLandmarks: true, minDetectionConfidence: 0.75, minTrackingConfidence: 0.75 });
-
-    pose1.onResults(results => renderResults(results, 'output1'));
-    pose2.onResults(results => renderResults(results, 'output2'));
-
-    detectFrame(video1, pose1);
-    detectFrame(video2, pose2);
+  poseInstances.forEach((pose, i) => {
+    pose.setOptions({
+      modelComplexity: 2,
+      smoothLandmarks: true,
+      minDetectionConfidence: 0.75,
+      minTrackingConfidence: 0.75
+    });
+    pose.onResults(results => renderResults(results, `output${i + 1}`));
+    detectFrame(videos[i], pose);
+  });
 };
+
 async function initCameras() {
-  // Request permission for all devices first
+  // Request permission once
   await navigator.mediaDevices.getUserMedia({ video: true });
 
   const devices = await navigator.mediaDevices.enumerateDevices();
-  console.log(devices);
-
-  const videoDevices = devices.filter(d => 
-    d.kind === 'videoinput' && 
+  const videoDevices = devices.filter(d =>
+    d.kind === 'videoinput' &&
     !d.label.toLowerCase().includes('ir')
   );
 
-  if (videoDevices.length < 2) {
-    throw new Error(`Need at least 2 RGB cameras, but found ${videoDevices.length}`);
+  if (videoDevices.length === 0) {
+    throw new Error("No RGB cameras found");
   }
 
-  const video1 = document.getElementById('webcam1');
-  const video2 = document.getElementById('webcam2');
+  const videoElements = [];
 
-  // Use exact deviceId to lock to that camera
+  // Webcam 1
+  const video1 = document.getElementById('webcam1');
   video1.srcObject = await navigator.mediaDevices.getUserMedia({
     video: { deviceId: { exact: videoDevices[0].deviceId } }
   });
-  video2.srcObject = await navigator.mediaDevices.getUserMedia({
-    video: { deviceId: { exact: videoDevices[1].deviceId } }
-  });
+  videoElements.push(video1);
 
-  return [video1, video2];
+  // Webcam 2 (optional)
+  if (videoDevices.length > 1) {
+    const video2 = document.getElementById('webcam2');
+    video2.srcObject = await navigator.mediaDevices.getUserMedia({
+      video: { deviceId: { exact: videoDevices[1].deviceId } }
+    });
+    videoElements.push(video2);
+  }
+
+  return videoElements;
 }
 
-    function detectFrame(video, pose) {
-      async function frame() {
-        await pose.send({ image: video });
-        requestAnimationFrame(frame);
-      }
-      video.onloadeddata = frame;
-    }
+function detectFrame(video, pose) {
+  async function frame() {
+    await pose.send({ image: video });
+    requestAnimationFrame(frame);
+  }
+  video.onloadeddata = frame;
+}
 
-    function renderResults(results, canvasId) {
-      const canvas = document.getElementById(canvasId);
-      const ctx = canvas.getContext('2d');
+function renderResults(results, canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return; // In case second canvas doesn't exist
 
-      ctx.save();
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+  const ctx = canvas.getContext('2d');
+  ctx.save();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
-      if (results.poseLandmarks) {
-        drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
-        drawLandmarks(ctx, results.poseLandmarks, { color: '#FF0000', lineWidth: 2, radius: 2 });
-      }
+  if (results.poseLandmarks) {
+    drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
+    drawLandmarks(ctx, results.poseLandmarks, { color: '#FF0000', lineWidth: 2, radius: 2 });
+  }
 
-      ctx.restore();
-    }
+  ctx.restore();
+}
