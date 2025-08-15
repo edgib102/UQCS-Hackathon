@@ -15,7 +15,7 @@ async function initCameras() {
     await navigator.mediaDevices.getUserMedia({ video: true });
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter(d => d.kind === 'videoinput' && !d.label.toLowerCase().includes('ir'));
-
+    console.log(videoDevices)
     if (videoDevices.length === 0) {
         throw new Error("No RGB cameras found.");
     }
