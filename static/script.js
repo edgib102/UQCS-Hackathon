@@ -69,7 +69,7 @@ function detectFrame(video, pose) {
 
 function renderResults(results, canvasId) {
   const canvas = document.getElementById(canvasId);
-  if (!canvas) return; // In case second canvas doesn't exist
+  if (!canvas) return;
 
   const ctx = canvas.getContext('2d');
   ctx.save();
@@ -77,8 +77,17 @@ function renderResults(results, canvasId) {
   ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
   if (results.poseLandmarks) {
-    drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
-    drawLandmarks(ctx, results.poseLandmarks, { color: '#FF0000', lineWidth: 2, radius: 2 });
+    // Filter connections to remove any that involve head landmarks (0–10)
+    const bodyConnections = POSE_CONNECTIONS.filter(
+      ([startIdx, endIdx]) => startIdx > 10 && endIdx > 10
+    );
+
+    // Draw body lines only
+    drawConnectors(ctx, results.poseLandmarks, bodyConnections, { color: '#00FF00', lineWidth: 4 });
+
+    // Draw landmarks excluding head
+    const bodyLandmarks = results.poseLandmarks.filter((_, idx) => idx > 10);
+    drawLandmarks(ctx, bodyLandmarks, { color: '#FF0000', lineWidth: 2, radius: 2 });
   }
 
   ctx.restore();
