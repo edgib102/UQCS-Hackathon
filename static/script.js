@@ -219,9 +219,9 @@ function getPose() {
   pose.setOptions({
     modelComplexity: 2,
     smoothLandmarks: true,
-    enableSegmentation: false,
-    minDetectionConfidence: 0.7,
-    minTrackingConfidence: 0.7
+    enableSegmentation: true,
+    minDetectionConfidence: 0.75,
+    minTrackingConfidence: 0.75
   });
 
   // --- Kalman filter setup ---
