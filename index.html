@@ -3,23 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-    <link rel="stylesheet" href="static\style.css">
+    <title>Squat Tracker</title>
+    <link rel="stylesheet" href="static/style.css">
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.1/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 
-    <script src="/static/script.js" type="module"></script>
     <script src="/static/posedata.js" type="module"></script>
+    <script src="/static/script.js" type="module"></script>
 </head>
 <body>
     <div class="video-wrapper">
         <video id="webcam" autoplay playsinline></video>
         <canvas id="output"></canvas>        
     </div>
-    <div class="stats-container">
-        <h2>Rep count: <span id="rep-counter"></span></h1>
-        <h2>Squat Depth Reached: <span id="squat-depth"></span></h1>
-    </div>
 
+    <div class="stats-container">
+        <h2>Rep count: <span id="rep-counter">0</span></h2>
+        <h2>Squat Depth Reached: <span id="squat-depth">false</span></h2>
+    </div>
 </body>
 </html>
