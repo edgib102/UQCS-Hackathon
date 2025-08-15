@@ -1,70 +1,60 @@
-// ---- Exported variables ----
-export let latestPose = null;          // latest MediaPipe landmarks
-export let leftKneeAngle = null;       // left knee angle in degrees
-export let rightKneeAngle = null;      // right knee angle in degrees
-export let squatDepthReached = false;  // true if bottom reached in current rep
-export let repCount = 0;               // total reps completed
-export let repState = 'STANDING';      // FSM: STANDING, DESCENDING, BOTTOM, ASCENDING
+// --- State Variables (Encapsulated within the module) ---
+let repCount = 0;
+let squatDepthReached = "No";
+let squatState = 'up'; // Can be 'up' or 'down'
 
-// ---- Thresholds (tweak for camera distance / user height) ----
-const STANDING_THRESHOLD = 160;  // angle above which we consider user standing
-const BOTTOM_THRESHOLD = 90;     // angle below which we consider squat bottom
+// --- Constants ---
+// Angle thresholds for squat detection
+const SQUAT_DOWN_THRESHOLD = 110; // Angle in degrees to consider a squat 'down'
+const SQUAT_UP_THRESHOLD = 160;   // Angle in degrees to consider a squat 'up'
 
-// ---- Main pose update function ----
-export function updatePose(results) {
-  if (!results.poseLandmarks) return;
-
-  const landmarks = results.poseLandmarks;
-  latestPose = landmarks;
-
-  // ----- Calculate knee angles -----
-  leftKneeAngle = calculateAngle(landmarks[23], landmarks[25], landmarks[27]);  // hip → knee → ankle
-  rightKneeAngle = calculateAngle(landmarks[24], landmarks[26], landmarks[28]);
-  const minKnee = Math.min(leftKneeAngle, rightKneeAngle);  // use smaller knee angle for FSM
-
-  // ----- Finite State Machine for squat -----
-  switch (repState) {
-    case 'STANDING':
-      if (minKnee < STANDING_THRESHOLD) repState = 'DESCENDING';
-      break;
-
-    case 'DESCENDING':
-      if (minKnee < BOTTOM_THRESHOLD) repState = 'BOTTOM';
-      break;
-
-    case 'BOTTOM':
-      if (minKnee > BOTTOM_THRESHOLD) {
-        repState = 'ASCENDING';
-        squatDepthReached = true;  // bottom reached, now ascending
-      }
-      break;
-
-    case 'ASCENDING':
-      if (minKnee > STANDING_THRESHOLD) {
-        repState = 'STANDING';
-        repCount += 1;             // completed rep
-        squatDepthReached = false; // reset for next rep
-      }
-      break;
-  }
-
-  // ----- Debug logs -----
-  console.log(`State: ${repState}, Rep count: ${repCount}, Depth reached: ${squatDepthReached}`);
-  console.log(`Left knee angle: ${leftKneeAngle.toFixed(1)}°, Right knee angle: ${rightKneeAngle.toFixed(1)}°`);
+/**
+ * Calculates the angle between three 2D points (p1, p2, p3) with p2 as the vertex.
+ * @returns {number} The angle in degrees.
+ */
+function calculateAngle(p1, p2, p3) {
+    const rad = Math.atan2(p3.y - p2.y, p3.x - p2.x) - Math.atan2(p1.y - p2.y, p1.x - p2.x);
+    let deg = Math.abs(rad * (180 / Math.PI));
+    return (deg > 180) ? 360 - deg : deg;
 }
 
-// ---- Helper function: calculate angle between three points ----
-function calculateAngle(a, b, c) {
-  const AB = { x: a.x - b.x, y: a.y - b.y };
-  const CB = { x: c.x - b.x, y: c.y - b.y };
+/**
+ * Processes pose landmarks to detect squats and count repetitions.
+ * @param {object} results - The pose detection results from MediaPipe.
+ */
+export function updatePoseData(results) {
+    if (!results.poseLandmarks) return;
 
-  const dot = AB.x * CB.x + AB.y * CB.y;
-  const magAB = Math.sqrt(AB.x**2 + AB.y**2);
-  const magCB = Math.sqrt(CB.x**2 + CB.y**2);
+    const landmarks = results.poseLandmarks;
 
-  const cosAngle = dot / (magAB * magCB);
+    // Get coordinates for relevant joints, ensuring they are detected
+    const [leftHip, rightHip, leftKnee, rightKnee, leftAnkle, rightAnkle] = [23, 24, 25, 26, 27, 28].map(id => landmarks[id]);
+    
+    // Proceed only if all key joints are visible
+    if ([leftHip, rightHip, leftKnee, rightKnee, leftAnkle, rightAnkle].some(lm => lm.visibility < 0.7)) {
+        return;
+    }
 
-  // Clamp to [-1,1] to prevent NaN due to floating point errors
-  const clamped = Math.max(-1, Math.min(1, cosAngle));
-  return Math.acos(clamped) * (180 / Math.PI);
+    // --- Calculate Knee Angles ---
+    const leftKneeAngle = calculateAngle(leftHip, leftKnee, leftAnkle);
+    const rightKneeAngle = calculateAngle(rightHip, rightKnee, rightAnkle);
+    const avgKneeAngle = (leftKneeAngle + rightKneeAngle) / 2;
+
+    // --- Squat Counting State Machine Logic ---
+    if (squatState === 'up' && avgKneeAngle < SQUAT_DOWN_THRESHOLD) {
+        squatState = 'down';
+        squatDepthReached = "Yes";
+    } else if (squatState === 'down' && avgKneeAngle > SQUAT_UP_THRESHOLD) {
+        squatState = 'up';
+        repCount++;
+        squatDepthReached = "No";
+    }
+}
+
+/**
+ * Returns the current pose analysis statistics.
+ * @returns {{repCount: number, squatDepthReached: string}}
+ */
+export function getPoseStats() {
+    return { repCount, squatDepthReached };
 }

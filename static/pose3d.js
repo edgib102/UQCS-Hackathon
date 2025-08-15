@@ -1,53 +1,44 @@
-// --- Constants ---
-// This is used by MediaPipe's drawing utils and needs to be available globally.
-window.POSE_CONNECTIONS = [
-  [0,1],[1,2],[2,3],[3,7], [0,4],[4,5],[5,6],[6,8], [9,10],
-  [11,12],[11,13],[13,15],[15,17],[15,19],[15,21],[17,19],
-  [12,14],[14,16],[16,18],[16,20],[16,22],[11,23],[12,24],
-  [23,24],[23,25],[24,26],[25,27],[26,28],[27,29],[28,30],
-  [29,31],[30,32]
-];
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.module.js";
+// ERROR REMOVED: The 'POSE_CONNECTIONS' constant is available globally from the script tag in index.html, so it doesn't need to be imported here.
 
-// --- THREE.js Scene Variables ---
-let scene, camera, renderer;
-const joints = [];
-const lines = [];
+let scene, camera, renderer, skeletonLine;
 
 /**
- * Initializes the THREE.js scene, camera, and renderer for 3D pose visualization.
+ * Initializes the Three.js scene, camera, and renderer.
+ * @param {HTMLCanvasElement} canvas - The canvas element to render the 3D scene on.
  */
-export function init3DScene() {
-    const canvas = document.getElementById('pose3dCanvas');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
+export function init3DScene(canvas) {
+    // --- Scene and Camera ---
     scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(75, canvas.width / canvas.height, 0.1, 1000);
-    camera.position.set(0, 0, 1.5); // Adjusted camera position for better view
+    scene.background = new THREE.Color(0x1a1a1a);
+    camera = new THREE.PerspectiveCamera(75, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
+    camera.position.set(0, 1.5, 2);
 
-    renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-    renderer.setSize(canvas.width, canvas.height);
+    // --- Renderer ---
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+    renderer.setSize(canvas.clientWidth, canvas.clientHeight);
 
-    // Create spheres for each landmark joint
-    const jointGeometry = new THREE.SphereGeometry(0.015, 16, 16);
-    const jointMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-    for (let i = 0; i < 33; i++) {
-        const joint = new THREE.Mesh(jointGeometry, jointMaterial);
-        joints.push(joint);
-        scene.add(joint);
-    }
+    // --- Helpers ---
+    const gridHelper = new THREE.GridHelper(10, 10, 0x888888, 0x444444);
+    scene.add(gridHelper);
 
-    // Create lines for bone connections
-    const lineMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00 });
-    POSE_CONNECTIONS.forEach(([startIdx, endIdx]) => {
-        const points = [new THREE.Vector3(), new THREE.Vector3()];
-        const geometry = new THREE.BufferGeometry().setFromPoints(points);
-        const line = new THREE.Line(geometry, lineMaterial);
-        lines.push({ line, startIdx, endIdx });
-        scene.add(line);
+    // --- Skeleton Line ---
+    const material = new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2 });
+    const geometry = new THREE.BufferGeometry();
+    skeletonLine = new THREE.LineSegments(geometry, material);
+    scene.add(skeletonLine);
+
+    // --- Resize Handler ---
+    const resizeObserver = new ResizeObserver(entries => {
+        const entry = entries[0];
+        const { width, height } = entry.contentRect;
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        renderer.setSize(width, height);
     });
-    
-    // Animation loop
+    resizeObserver.observe(canvas.parentElement);
+
+    // --- Render Loop ---
     function animate() {
         requestAnimationFrame(animate);
         renderer.render(scene, camera);
@@ -56,25 +47,39 @@ export function init3DScene() {
 }
 
 /**
- * Updates the positions of the 3D joints and lines based on new landmark data.
- * @param {object[]} landmarks - The array of pose landmarks from MediaPipe.
+ * Updates the 3D skeleton's joint positions based on MediaPipe landmarks.
+ * @param {object[]} landmarks - The poseWorldLandmarks from MediaPipe results.
  */
-export function update3DScene(landmarks) {
-    if (!landmarks || joints.length === 0) return;
+export function updateSkeleton(landmarks) {
+    if (!landmarks || !skeletonLine) return;
 
-    // Update joint positions
-    landmarks.forEach((lm, idx) => {
-        // Center the pose and invert Y-axis for correct orientation
-        joints[idx].position.set(lm.x - 0.5, -lm.y + 0.5, -lm.z);
+    const positions = [];
+    
+    // Create a line for each connection in the skeleton
+    // 'POSE_CONNECTIONS' is used here directly from the global scope.
+    POSE_CONNECTIONS.forEach(conn => {
+        const start = landmarks[conn[0]];
+        const end = landmarks[conn[1]];
+        
+        // Ensure both landmarks are visible before drawing a line
+        if (start.visibility > 0.5 && end.visibility > 0.5) {
+            positions.push((start.x - 0.5) * 2, -(start.y - 0.5) * 2, -start.z * 2);
+            positions.push((end.x - 0.5) * 2, -(end.y - 0.5) * 2, -end.z * 2);
+        }
     });
+    
+    skeletonLine.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    skeletonLine.geometry.computeBoundingSphere();
 
-    // Update line positions
-    lines.forEach(({ line, startIdx, endIdx }) => {
-        const startPos = joints[startIdx].position;
-        const endPos = joints[endIdx].position;
-        const positions = line.geometry.attributes.position;
-        positions.setXYZ(0, startPos.x, startPos.y, startPos.z);
-        positions.setXYZ(1, endPos.x, endPos.y, endPos.z);
-        positions.needsUpdate = true;
-    });
+    // --- Auto-framing Camera ---
+    const sphere = skeletonLine.geometry.boundingSphere;
+    if (sphere) {
+        const center = sphere.center;
+        const radius = sphere.radius;
+        
+        camera.lookAt(center);
+
+        const distance = radius * 2.5;
+        camera.position.set(center.x, center.y, center.z + distance);
+    }
 }
