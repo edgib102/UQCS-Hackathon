@@ -10,7 +10,11 @@
  window.onload = async () => {
 
     const numCameras = await countCameras();
-
+    
+    const videoDevices = devices.filter(d => 
+      d.kind === 'videoinput' && 
+      !d.label.toLowerCase().includes('ir')
+    );
     // Optional: alert the user if fewer than 2 cameras are connected
     if (numCameras < 2) {
       alert('You need at least 2 cameras for this setup!');
