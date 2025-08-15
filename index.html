@@ -1,38 +1,350 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Squat Tracker</title>
-    <link rel="stylesheet" href="static/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.1/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-    <script src="/static/script.js" type="module"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Squat Form Checker — Front + Side + 3D</title>
+  <style>
+    :root { --bg:#0b0f14; --card:#121821; --ink:#e6edf3; --muted:#9fb1c3; --good:#17c964; --warn:#f5a524; --bad:#f31260; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+           color:var(--ink); background: radial-gradient(1200px 800px at 80% -10%, #1a2431 10%, var(--bg) 60%); }
+    header { padding:16px 20px; display:flex; align-items:center; gap:12px; border-bottom:1px solid #213044; }
+    header h1 { margin:0; font-size:18px; font-weight:600; letter-spacing:0.2px; }
+    .wrap { display:grid; grid-template-columns: 1.4fr 1fr; gap:16px; padding:16px; }
+    .panel { background:var(--card); border:1px solid #1e2a3a; border-radius:16px; padding:14px; box-shadow:0 10px 25px rgba(0,0,0,.25); }
+    .cams { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    .cam { position:relative; }
+    .cam h3 { margin:6px 0 8px; font-size:14px; color:var(--muted); font-weight:600; }
+    video, canvas { width:100%; height:auto; border-radius:12px; display:block; }
+    .overlay { position:absolute; inset:22px 8px 8px 8px; pointer-events:none; }
+    .controls { display:flex; gap:10px; align-items:end; flex-wrap:wrap; margin-top:8px; }
+    label { font-size:12px; color:var(--muted); display:block; margin-bottom:4px; }
+    select, button { background:#0f1620; color:var(--ink); border:1px solid #233246; border-radius:10px; padding:8px 10px; }
+    .stats { display:grid; grid-template-columns: repeat(2, 1fr); gap:12px; }
+    .card { background:#0f1620; border:1px solid #233246; border-radius:14px; padding:12px; }
+    .metric { font-size:28px; font-weight:700; }
+    .flag.good { color:var(--good); }
+    .flag.warn { color:var(--warn); }
+    .flag.bad { color:var(--bad); }
+    #gl { width:100%; height:560px; border-radius:14px; display:block; background:#0a0d12; }
+    .hint { color:var(--muted); font-size:12px; margin-top:4px; }
+  </style>
+
+  <!-- Load MediaPipe (non-module UMD) FIRST so globals are available -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+
+  <!-- ESM for Three.js via import map -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    // ---- Imports ----
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // Pull MediaPipe items from the global window (loaded above via non-module scripts)
+    const { Pose, POSE_CONNECTIONS, drawConnectors, drawLandmarks } = window;
+
+    // ---- Elements ----
+    const $ = sel => document.querySelector(sel);
+    const cams = { front: { video: $('#webcam1'), canvas: $('#output1') }, side: { video: $('#webcam2'), canvas: $('#output2') } };
+    const selects = { front: $('#frontDevice'), side: $('#sideDevice') };
+
+    // Stats elements
+    const repEl = $('#repCounter');
+    const depthEl = $('#depthFlag');
+    const valgusEl = $('#valgusFlag');
+    const wobbleEl = $('#wobbleFlag');
+    const ankleEl = $('#ankleAngle');
+
+    // ---- Globals ----
+    let inSquat = false, repCount = 0, depthReached = false;
+    let kneeXs = []; // for wobble
+    let sideLandmarks = null; // feed 3D viz
+
+    // ---- Camera setup ----
+    async function listVideoDevices() {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      stream.getTracks().forEach(t => t.stop());
+      const devices = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput' && !/ir|depth/i.test(d.label));
+      selects.front.innerHTML = devices.map((d,i)=>`<option value="${d.deviceId}">${i+1}. ${d.label||'Camera '+(i+1)}</option>`).join('');
+      selects.side.innerHTML = selects.front.innerHTML;
+      return devices;
+    }
+
+    async function startVideo(videoEl, deviceId) {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: deviceId ? { exact: deviceId } : undefined, width:1280, height:720 }, audio:false });
+      videoEl.srcObject = stream; await videoEl.play(); return stream;
+    }
+
+    async function initCams() {
+      const devices = await listVideoDevices();
+      await startVideo(cams.front.video, devices[0]?.deviceId);
+      await startVideo(cams.side.video, devices[1]?.deviceId || devices[0]?.deviceId);
+    }
+
+    selects.front.addEventListener('change', e => startVideo(cams.front.video, e.target.value));
+    selects.side.addEventListener('change', e => startVideo(cams.side.video, e.target.value));
+
+    // ---- Pose instances (one per feed) ----
+    function createPose() {
+      const p = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
+      p.setOptions({ modelComplexity: 2, smoothLandmarks: true, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+      return p;
+    }
+
+    const poseFront = createPose();
+    const poseSide = createPose();
+
+    function detectLoop(videoEl, pose, callback) {
+      async function tick() {
+        if (videoEl.readyState >= 2) {
+          await pose.send({ image: videoEl });
+        }
+        requestAnimationFrame(tick);
+      }
+      pose.onResults(callback);
+      videoEl.onloadeddata = () => tick();
+    }
+
+    // ---- Maths helpers ----
+    function angleABC(a,b,c){ // angle at b given THREE points with x,y,z in [0..1]
+      const ab = {x:a.x-b.x, y:a.y-b.y, z:(a.z||0)-(b.z||0)};
+      const cb = {x:c.x-b.x, y:c.y-b.y, z:(c.z||0)-(b.z||0)};
+      const dot = ab.x*cb.x + ab.y*cb.y + ab.z*cb.z;
+      const mab = Math.hypot(ab.x,ab.y,ab.z); const mcb = Math.hypot(cb.x,cb.y,cb.z);
+      const cos = Math.min(1, Math.max(-1, dot/(mab*mcb||1))); // clamp
+      return Math.acos(cos)*180/Math.PI;
+    }
+
+    function lineAngleToVertical(a,b){ // angle of tibia to vertical (0 = straight up)
+      const dx = (b.x - a.x), dy = (b.y - a.y);
+      const angToHoriz = Math.atan2(dy, dx); // radians
+      const angToVert = Math.PI/2 - Math.abs(angToHoriz);
+      return Math.abs(angToVert)*180/Math.PI; // 0 vertical, higher = more dorsiflexion/lean
+    }
+
+    // ---- Analysis ----
+    function analyzeSide(landmarks){
+      if(!landmarks) return;
+      sideLandmarks = landmarks; // feed 3D
+      const L = idx => landmarks[idx];
+
+      // Knee angle (hip-knee-ankle). We use LEFT chain (23,25,27) by default.
+      const kneeAngle = angleABC(L(23), L(25), L(27));
+
+      // Depth (hip crease below knee): compare y (screen coords, lower = smaller? In Mediapipe, y increases downward)
+      const hipY = L(23).y, kneeY = L(25).y;
+      const depth = hipY > kneeY + 0.02; // small buffer
+      depthReached = depth;
+      depthEl.textContent = depth ? 'Yes' : 'No';
+      depthEl.className = 'metric ' + (depth ? 'flag good' : '');
+
+      // Rep logic using knee angle thresholds
+      if(kneeAngle < 95 && !inSquat){ inSquat = true; }
+      if(kneeAngle > 160 && inSquat){
+        repCount++; inSquat = false; repEl.textContent = String(repCount);
+      }
+
+      // Ankle mobility (tibia angle to vertical between ankle (27) and knee (25))
+      const ankleMob = lineAngleToVertical(L(27), L(25));
+      ankleEl.textContent = ankleMob.toFixed(1) + '°';
+    }
+
+    function analyzeFront(landmarks){
+      if(!landmarks) return;
+      const L = idx => landmarks[idx];
+      // Normalize distances by hip width to account for scale
+      const hipWidth = Math.abs(L(23).x - L(24).x) || 1e-6;
+      const kneeGap = Math.abs(L(25).x - L(26).x);
+      const ankleGap = Math.abs(L(27).x - L(28).x);
+
+      // Valgus metric: knee gap relative to ankle/hip width (lower = more valgus)
+      const valgusRatio = kneeGap / Math.max(hipWidth, ankleGap, 1e-6);
+      const valgus = valgusRatio < 0.8; // heuristic threshold
+      valgusEl.textContent = valgus ? 'Valgus!' : 'OK';
+      valgusEl.className = 'metric flag ' + (valgus ? 'bad' : 'good');
+
+      // Wobble: variance of knee midline x during the concentric phase
+      const kneeMidX = (L(25).x + L(26).x)/2;
+      kneeXs.push(kneeMidX);
+      if(kneeXs.length > 45) kneeXs.shift(); // ~0.75s at 60fps
+      const mean = kneeXs.reduce((a,b)=>a+b,0)/(kneeXs.length||1);
+      const variance = kneeXs.reduce((s,v)=> s + (v-mean)*(v-mean), 0)/(kneeXs.length||1);
+      const wobble = Math.sqrt(variance) / (hipWidth||1e-6); // normalized
+      const wobbleLvl = wobble > 0.12 ? 'High' : wobble > 0.06 ? 'Med' : 'Low';
+      wobbleEl.textContent = wobbleLvl;
+      wobbleEl.className = 'metric flag ' + (wobbleLvl==='High' ? 'bad' : wobbleLvl==='Med' ? 'warn' : 'good');
+    }
+
+    function render2D(results, canvas){
+      const ctx = canvas.getContext('2d');
+      canvas.width = results.image.width || 1280;
+      canvas.height = results.image.height || 720;
+      ctx.save();
+      ctx.clearRect(0,0,canvas.width, canvas.height);
+      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+      if(results.poseLandmarks){
+        drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, { color:'#38f', lineWidth:4 });
+        drawLandmarks(ctx, results.poseLandmarks, { color:'#fff', lineWidth:2, radius:3 });
+      }
+      ctx.restore();
+    }
+
+    // ---- 3D Viz ----
+    const gl = document.getElementById('gl');
+    const renderer = new THREE.WebGLRenderer({ canvas: gl, antialias:true });
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0d12);
+
+    const cam3 = new THREE.PerspectiveCamera(45, 1, 0.01, 10);
+    const controls = new OrbitControls(cam3, renderer.domElement);
+    controls.autoRotate = true; controls.autoRotateSpeed = 1.2; controls.enableDamping = true;
+
+    const light = new THREE.DirectionalLight(0xffffff, 1.0); light.position.set(1,2,3); scene.add(light);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+
+    const grid = new THREE.GridHelper(2, 20); grid.position.y = -0.8; scene.add(grid);
+
+    const pointGeo = new THREE.SphereGeometry(0.015, 12, 12);
+    const pointMat = new THREE.MeshStandardMaterial({ metalness:0.2, roughness:0.6 });
+    const joints = []; // 33 joints
+    for(let i=0;i<33;i++){ const m = new THREE.Mesh(pointGeo, pointMat.clone()); scene.add(m); joints.push(m); }
+
+    // Build connection lines
+    const connMat = new THREE.LineBasicMaterial();
+    const connGeos = [];
+    const lines = [];
+    for(const [a,b] of POSE_CONNECTIONS){
+      const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+      const line = new THREE.Line(geo, connMat);
+      scene.add(line); lines.push(line); connGeos.push(geo);
+    }
+
+    function normToWorld({x,y,z}){
+      // Convert MediaPipe normalized [0..1] to a centered meter-ish space
+      // Flip X so it matches screen orientation
+      const X = (x - 0.5) * -1.6; // wider framing
+      const Y = (0.8 - y) * 1.6;  // y up
+      const Z = (z||0) * -0.8;    // depth forward
+      return new THREE.Vector3(X,Y,Z);
+    }
+
+    function update3D(landmarks){
+      if(!landmarks) return;
+      // center by pelvis mid
+      const midHip = {
+        x: (landmarks[23].x + landmarks[24].x)/2,
+        y: (landmarks[23].y + landmarks[24].y)/2,
+        z: (landmarks[23].z + landmarks[24].z)/2,
+      };
+      for(let i=0;i<joints.length;i++){
+        const p = { x: landmarks[i].x - midHip.x + 0.5, y: landmarks[i].y - midHip.y + 0.5, z: (landmarks[i].z||0) - midHip.z };
+        const v = normToWorld(p);
+        joints[i].position.copy(v);
+      }
+      // Update connections
+      POSE_CONNECTIONS.forEach(([a,b], idx)=>{
+        const geo = lines[idx].geometry;
+        const arr = new Float32Array(6);
+        const v1 = joints[a].position, v2 = joints[b].position;
+        arr.set([v1.x,v1.y,v1.z, v2.x,v2.y,v2.z]);
+        geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+        geo.attributes.position.needsUpdate = true;
+      });
+    }
+
+    function onResize(){
+      const rect = gl.getBoundingClientRect();
+      renderer.setSize(rect.width, rect.height, false);
+      cam3.aspect = rect.width/rect.height; cam3.updateProjectionMatrix();
+      cam3.position.set(0.2, 0.5, 1.9);
+      controls.update();
+    }
+    window.addEventListener('resize', onResize);
+    onResize();
+
+    function animate(){
+      requestAnimationFrame(animate);
+      controls.update();
+      update3D(sideLandmarks);
+      renderer.render(scene, cam3);
+    }
+    animate();
+
+    // ---- Wire everything ----
+    function handleFront(results){
+      analyzeFront(results.poseLandmarks);
+      render2D(results, cams.front.canvas);
+    }
+    function handleSide(results){
+      analyzeSide(results.poseLandmarks);
+      render2D(results, cams.side.canvas);
+    }
+
+    // Kickoff
+    await initCams();
+    const poseFrontInst = createPose();
+    const poseSideInst = createPose();
+    detectLoop(cams.front.video, poseFrontInst, handleFront);
+    detectLoop(cams.side.video, poseSideInst, handleSide);
+
+    // Simple keyboard: R to reset reps
+    window.addEventListener('keydown', e=>{ if(e.key.toLowerCase()==='r'){ repCount=0; repEl.textContent='0'; } });
+  </script>
 </head>
 <body>
-    <h2>Camera 1</h2>
-    <video id="webcam1" autoplay playsinline width="640" height="480"></video>
-    <canvas id="output1" width="640" height="480"></canvas>
+  <header>
+    <h1>Squat Form Checker</h1>
+    <div class="controls">
+      <div>
+        <label>Front camera</label>
+        <select id="frontDevice"></select>
+      </div>
+      <div>
+        <label>Side camera</label>
+        <select id="sideDevice"></select>
+      </div>
+      <div class="hint">Tip: press <strong>R</strong> to reset reps.</div>
+    </div>
+  </header>
 
-    <h2>Camera 2</h2>
-    <video id="webcam2" autoplay playsinline width="640" height="480"></video>
-    <canvas id="output2" width="640" height="480"></canvas>
-
-    <!-- <div class="video-wrapper">
-        <div>
-            <video id="webcam" autoplay playsinline></video>
-            <canvas id="output"></canvas>              
+  <div class="wrap">
+    <div class="panel">
+      <div class="cams">
+        <div class="cam">
+          <h3>Front view (valgus & wobble)</h3>
+          <video id="webcam1" autoplay playsinline muted></video>
+          <canvas id="output1" class="overlay"></canvas>
         </div>
-        <div>
-            <video id="webcam2" autoplay playsinline width="640" height="480"></video>
-            <canvas id="output2" width="640" height="480"></canvas>
+        <div class="cam">
+          <h3>Side view (depth & ankle)</h3>
+          <video id="webcam2" autoplay playsinline muted></video>
+          <canvas id="output2" class="overlay"></canvas>
         </div>
-      
-    </div> -->
+      </div>
+      <div class="stats" style="margin-top:12px;">
+        <div class="card"><div>Reps</div><div id="repCounter" class="metric">0</div></div>
+        <div class="card"><div>Depth reached</div><div id="depthFlag" class="metric">No</div></div>
+        <div class="card"><div>Knee valgus</div><div id="valgusFlag" class="metric">OK</div></div>
+        <div class="card"><div>Knee wobble</div><div id="wobbleFlag" class="metric">Low</div></div>
+        <div class="card"><div>Ankle mobility (tibia→vertical)</div><div id="ankleAngle" class="metric">0.0°</div></div>
+      </div>
+    </div>
 
-    <!-- <div class="stats-container">
-        <h2>Rep count: <span id="rep-counter">0</span></h2>
-        <h2>Squat Depth Reached: <span id="squat-depth">false</span></h2>
-    </div> -->
+    <div class="panel">
+      <h3 style="margin:6px 0 10px; color:var(--muted);">3D Pose (rotating)</h3>
+      <canvas id="gl"></canvas>
+      <div class="hint">3D landmarks update from the <strong>side</strong> feed. Drag to orbit. Auto-rotates.</div>
+    </div>
+  </div>
 </body>
 </html>

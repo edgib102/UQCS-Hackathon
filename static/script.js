@@ -1,3 +1,7 @@
+import { drawConnectors, drawLandmarks, POSE_CONNECTIONS } from 'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js';
+import { Pose } from 'https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js';
+
+
 async function countCameras() {
   const devices = await navigator.mediaDevices.enumerateDevices();
   const videoDevices = devices.filter(device => device.kind === 'videoinput');
