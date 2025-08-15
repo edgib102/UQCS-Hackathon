@@ -23,10 +23,11 @@ function getPose() {
 
   const pose = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
   pose.setOptions({
-    modelComplexity: 1,
-    smoothLandmarks: true,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5
+  modelComplexity: 2, // 0, 1, 2
+  smoothLandmarks: true,
+  enableSegmentation: false,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence: 0.7
   });
 
   pose.onResults(results => {
