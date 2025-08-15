@@ -7,8 +7,9 @@ export let repCount = 0;               // total reps completed
 export let repState = 'STANDING';      // FSM: STANDING, DESCENDING, BOTTOM, ASCENDING
 
 // ---- Thresholds (tweak for camera distance / user height) ----
-const STANDING_THRESHOLD = 160;  // angle above which we consider user standing
-const BOTTOM_THRESHOLD = 90;     // angle below which we consider squat bottom
+const STANDING_THRESHOLD = 160;        // angle above which we consider user standing
+const BOTTOM_THRESHOLD = 100;           // angle below which we consider squat bottom
+const KNEE_VISIBILITY_THRESHOLD = 0.5; // minimum visibility to count knee
 
 // ---- Main pose update function ----
 export function updatePose(results) {
@@ -17,9 +18,19 @@ export function updatePose(results) {
   const landmarks = results.poseLandmarks;
   latestPose = landmarks;
 
+  const leftKneeLandmark = landmarks[25];
+  const rightKneeLandmark = landmarks[26];
+
+  // Skip if either knee is not visible enough
+  if (leftKneeLandmark.visibility < KNEE_VISIBILITY_THRESHOLD || 
+      rightKneeLandmark.visibility < KNEE_VISIBILITY_THRESHOLD) {
+    console.log('Knee(s) not visible, skipping rep detection');
+    return;
+  }
+
   // ----- Calculate knee angles -----
-  leftKneeAngle = calculateAngle(landmarks[23], landmarks[25], landmarks[27]);  // hip → knee → ankle
-  rightKneeAngle = calculateAngle(landmarks[24], landmarks[26], landmarks[28]);
+  leftKneeAngle = calculateAngle(landmarks[23], leftKneeLandmark, landmarks[27]);  // hip → knee → ankle
+  rightKneeAngle = calculateAngle(landmarks[24], rightKneeLandmark, landmarks[28]);
   const minKnee = Math.min(leftKneeAngle, rightKneeAngle);  // use smaller knee angle for FSM
 
   // ----- Finite State Machine for squat -----
