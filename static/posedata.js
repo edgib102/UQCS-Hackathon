@@ -1,38 +1,59 @@
-// Export a variable to hold the latest pose and knee angle
-export let latestPose = null;
-export let leftKneeAngle = null;
-export let rightKneeAngle = null;
-export let squatDepthReached = false; // true if knee angle < 90 deg
+// ---- Exported variables ----
+export let latestPose = null;          // latest MediaPipe landmarks
+export let leftKneeAngle = null;       // left knee angle in degrees
+export let rightKneeAngle = null;      // right knee angle in degrees
+export let squatDepthReached = false;  // true if bottom reached in current rep
+export let repCount = 0;               // total reps completed
+export let repState = 'STANDING';      // FSM: STANDING, DESCENDING, BOTTOM, ASCENDING
 
-// Export a function to update the pose and calculate angles
+// ---- Thresholds (tweak for camera distance / user height) ----
+const STANDING_THRESHOLD = 160;  // angle above which we consider user standing
+const BOTTOM_THRESHOLD = 90;     // angle below which we consider squat bottom
+
+// ---- Main pose update function ----
 export function updatePose(results) {
   if (!results.poseLandmarks) return;
 
   const landmarks = results.poseLandmarks;
   latestPose = landmarks;
 
-  // Left leg
-  const leftHip = landmarks[23];
-  const leftKnee = landmarks[25];
-  const leftAnkle = landmarks[27];
-  leftKneeAngle = calculateAngle(leftHip, leftKnee, leftAnkle);
+  // ----- Calculate knee angles -----
+  leftKneeAngle = calculateAngle(landmarks[23], landmarks[25], landmarks[27]);  // hip → knee → ankle
+  rightKneeAngle = calculateAngle(landmarks[24], landmarks[26], landmarks[28]);
+  const minKnee = Math.min(leftKneeAngle, rightKneeAngle);  // use smaller knee angle for FSM
 
-  // Right leg
-  const rightHip = landmarks[24];
-  const rightKnee = landmarks[26];
-  const rightAnkle = landmarks[28];
-  rightKneeAngle = calculateAngle(rightHip, rightKnee, rightAnkle);
+  // ----- Finite State Machine for squat -----
+  switch (repState) {
+    case 'STANDING':
+      if (minKnee < STANDING_THRESHOLD) repState = 'DESCENDING';
+      break;
 
-  // Check squat depth (bottom if either knee angle < 90°)
-  squatDepthReached = leftKneeAngle < 90 || rightKneeAngle < 90;
+    case 'DESCENDING':
+      if (minKnee < BOTTOM_THRESHOLD) repState = 'BOTTOM';
+      break;
 
-  // Debug logs
-  console.log(`Left knee angle: ${leftKneeAngle.toFixed(1)}°`);
-  console.log(`Right knee angle: ${rightKneeAngle.toFixed(1)}°`);
-  console.log(`Squat bottom reached? ${squatDepthReached}`);
+    case 'BOTTOM':
+      if (minKnee > BOTTOM_THRESHOLD) {
+        repState = 'ASCENDING';
+        squatDepthReached = true;  // bottom reached, now ascending
+      }
+      break;
+
+    case 'ASCENDING':
+      if (minKnee > STANDING_THRESHOLD) {
+        repState = 'STANDING';
+        repCount += 1;             // completed rep
+        squatDepthReached = false; // reset for next rep
+      }
+      break;
+  }
+
+  // ----- Debug logs -----
+  console.log(`State: ${repState}, Rep count: ${repCount}, Depth reached: ${squatDepthReached}`);
+  console.log(`Left knee angle: ${leftKneeAngle.toFixed(1)}°, Right knee angle: ${rightKneeAngle.toFixed(1)}°`);
 }
 
-// Helper function to calculate angle between three points
+// ---- Helper function: calculate angle between three points ----
 function calculateAngle(a, b, c) {
   const AB = { x: a.x - b.x, y: a.y - b.y };
   const CB = { x: c.x - b.x, y: c.y - b.y };
@@ -43,7 +64,7 @@ function calculateAngle(a, b, c) {
 
   const cosAngle = dot / (magAB * magCB);
 
-  // Clamp cosAngle to [-1, 1] to avoid NaN due to rounding
+  // Clamp to [-1,1] to prevent NaN due to floating point errors
   const clamped = Math.max(-1, Math.min(1, cosAngle));
   return Math.acos(clamped) * (180 / Math.PI);
 }
