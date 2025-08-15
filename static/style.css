@@ -9,6 +9,7 @@
     display: none;
 }
 #webcam, #output{
-    width: 20rem;
+    width: 40rem;
     aspect-ratio: 4/3;
 }
+

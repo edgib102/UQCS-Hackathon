@@ -9,30 +9,9 @@ function getPose() {
   const canvasElement = document.getElementById('output');
   const canvasCtx = canvasElement.getContext('2d');
 
-  // Add status badges for rep count and depth
-  const repBadge = document.createElement('div');
-  repBadge.style.position = 'absolute';
-  repBadge.style.top = '10px';
-  repBadge.style.left = '10px';
-  repBadge.style.backgroundColor = 'rgba(0,0,0,0.5)';
-  repBadge.style.color = 'white';
-  repBadge.style.padding = '5px 10px';
-  repBadge.style.fontSize = '18px';
-  repBadge.style.borderRadius = '5px';
-  repBadge.innerText = `Reps: 0`;
-  document.body.appendChild(repBadge);
+  const repCounter = document.getElementById("rep-counter")
+  const squatDepthCounter = document.getElementById("squat-depth")
 
-  const depthBadge = document.createElement('div');
-  depthBadge.style.position = 'absolute';
-  depthBadge.style.top = '10px';
-  depthBadge.style.right = '10px';
-  depthBadge.style.backgroundColor = 'rgba(0,0,0,0.5)';
-  depthBadge.style.color = 'white';
-  depthBadge.style.padding = '5px 10px';
-  depthBadge.style.fontSize = '18px';
-  depthBadge.style.borderRadius = '5px';
-  depthBadge.innerText = `Bottom reached: false`;
-  document.body.appendChild(depthBadge);
 
   navigator.mediaDevices.getUserMedia({ video: true, audio: false })
     .then((stream) => {
@@ -53,9 +32,10 @@ function getPose() {
   pose.onResults(results => {
     updatePose(results);  // updates repCount, squatDepthReached, angles
 
-    // Update badges
-    repBadge.innerText = `Reps: ${repCount}`;
-    depthBadge.innerText = `Bottom reached: ${squatDepthReached}`;
+    // update counters
+    repCounter.innerHTML = repCount
+    squatDepthCounter.innerHTML = squatDepthReached
+
 
     // Draw video and skeleton
     canvasCtx.save();
