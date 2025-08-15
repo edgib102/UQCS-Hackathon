@@ -12,8 +12,8 @@ window.onload = () =>{
   function getPose(){
     const videoElement = document.getElementById('webcam');
     const canvasElement = document.getElementById('output');
-    
     const canvasCtx = canvasElement.getContext('2d');
+
     navigator.mediaDevices.getUserMedia({ video: true, audio: false })
       .then((stream) => {
         // Set the video element source to the webcam stream
