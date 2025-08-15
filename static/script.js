@@ -40,7 +40,7 @@ window.onload = () =>{
         drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS,
           {color: '#00FF00', lineWidth: 4});
         drawLandmarks(canvasCtx, results.poseLandmarks,
-          {color: '#FF0000', lineWidth: 1,});
+          {color: '#FF0000', lineWidth: 1, radius: 1});
       }
       canvasCtx.restore();
     });
