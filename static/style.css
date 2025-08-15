@@ -5,6 +5,9 @@
     display: flex;
     gap: 1rem;
 }
+#webcam{
+    display: none;
+}
 #webcam, #output{
     width: 20rem;
     aspect-ratio: 4/3;
