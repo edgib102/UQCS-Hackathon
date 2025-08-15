@@ -5,7 +5,7 @@
     display: flex;
     gap: 1rem;
 }
-#webcam{
+#webcam1, #webcam2{
     display: none;
 }
 #webcam, #output{

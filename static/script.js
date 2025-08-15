@@ -1,94 +1,113 @@
-async function countCameras() {
-  const devices = await navigator.mediaDevices.enumerateDevices();
-  const videoDevices = devices.filter(device => device.kind === 'videoinput');
-  console.log(`Number of cameras connected: ${videoDevices.length}`);
-  return videoDevices.length;
-}
+import { init3DScene, update3DScene } from './pose3d.js';
+import { updateRepCounter } from './posedata.js';
 
-window.onload = async () => {
-  const videos = await initCameras();
+// --- DOM Elements ---
+const video1 = document.getElementById('webcam1');
+const video2 = document.getElementById('webcam2');
+const canvas1 = document.getElementById('output1');
+const canvas2 = document.getElementById('output2');
 
-  const poseInstances = videos.map(() =>
-    new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` })
-  );
-
-  poseInstances.forEach((pose, i) => {
-    pose.setOptions({
-      modelComplexity: 2,
-      smoothLandmarks: true,
-      minDetectionConfidence: 0.75,
-      minTrackingConfidence: 0.75
-    });
-    pose.onResults(results => renderResults(results, `output${i + 1}`));
-    detectFrame(videos[i], pose);
-  });
-};
-
+/**
+ * Initializes and returns all available video camera elements.
+ */
 async function initCameras() {
-  // Request permission once
-  await navigator.mediaDevices.getUserMedia({ video: true });
+    await navigator.mediaDevices.getUserMedia({ video: true }); // Request permission
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter(d => d.kind === 'videoinput' && !d.label.toLowerCase().includes('ir'));
 
-  const devices = await navigator.mediaDevices.enumerateDevices();
-  const videoDevices = devices.filter(d =>
-    d.kind === 'videoinput' &&
-    !d.label.toLowerCase().includes('ir')
-  );
+    if (videoDevices.length === 0) {
+        throw new Error("No RGB cameras found.");
+    }
 
-  if (videoDevices.length === 0) {
-    throw new Error("No RGB cameras found");
-  }
+    const videoElements = [];
 
-  const videoElements = [];
-
-  // Webcam 1
-  const video1 = document.getElementById('webcam1');
-  video1.srcObject = await navigator.mediaDevices.getUserMedia({
-    video: { deviceId: { exact: videoDevices[0].deviceId } }
-  });
-  videoElements.push(video1);
-
-  // Webcam 2 (optional)
-  if (videoDevices.length > 1) {
-    const video2 = document.getElementById('webcam2');
-    video2.srcObject = await navigator.mediaDevices.getUserMedia({
-      video: { deviceId: { exact: videoDevices[1].deviceId } }
+    // Setup Camera 1
+    video1.srcObject = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: videoDevices[0].deviceId } }
     });
-    videoElements.push(video2);
-  }
+    videoElements.push(video1);
 
-  return videoElements;
+    // Setup Camera 2 if it exists
+    if (videoDevices.length > 1) {
+        video2.style.display = 'block';
+        canvas2.style.display = 'block';
+        video2.srcObject = await navigator.mediaDevices.getUserMedia({
+            video: { deviceId: { exact: videoDevices[1].deviceId } }
+        });
+        videoElements.push(video2);
+    }
+
+    return videoElements;
 }
 
-function detectFrame(video, pose) {
-  async function frame() {
-    await pose.send({ image: video });
-    requestAnimationFrame(frame);
-  }
-  video.onloadeddata = frame;
+/**
+ * Renders the pose detection results onto a 2D canvas.
+ */
+function render2DResults(results, canvas) {
+    const ctx = canvas.getContext('2d');
+    ctx.save();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+    if (results.poseLandmarks) {
+        // Only draw body landmarks, excluding the head (landmarks 0-10)
+        const bodyConnections = POSE_CONNECTIONS.filter(([start, end]) => start > 10 && end > 10);
+        drawConnectors(ctx, results.poseLandmarks, bodyConnections, { color: '#00FF00', lineWidth: 4 });
+        drawLandmarks(ctx, results.poseLandmarks.slice(11), { color: '#FF0000', radius: 2 });
+    }
+    ctx.restore();
 }
 
-function renderResults(results, canvasId) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
+/**
+ * Creates a MediaPipe Pose instance and sets it to process a video stream.
+ */
+function setupPoseDetection(video, onResultsCallback) {
+    const pose = new Pose({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
+    });
 
-  const ctx = canvas.getContext('2d');
-  ctx.save();
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+    pose.setOptions({
+        modelComplexity: 1, // Using 1 for better performance, 2 is more accurate but slower
+        smoothLandmarks: true,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.7,
+    });
 
-  if (results.poseLandmarks) {
-    // Filter connections to remove any that involve head landmarks (0–10)
-    const bodyConnections = POSE_CONNECTIONS.filter(
-      ([startIdx, endIdx]) => startIdx > 10 && endIdx > 10
-    );
+    pose.onResults(onResultsCallback);
 
-    // Draw body lines only
-    drawConnectors(ctx, results.poseLandmarks, bodyConnections, { color: '#00FF00', lineWidth: 4 });
-
-    // Draw landmarks excluding head
-    const bodyLandmarks = results.poseLandmarks.filter((_, idx) => idx > 10);
-    drawLandmarks(ctx, bodyLandmarks, { color: '#FF0000', lineWidth: 2, radius: 2 });
-  }
-
-  ctx.restore();
+    video.onloadeddata = async () => {
+        async function frame() {
+            await pose.send({ image: video });
+            requestAnimationFrame(frame);
+        }
+        frame();
+    };
 }
+
+
+// --- Main Application Logic ---
+window.onload = async () => {
+    try {
+        const videos = await initCameras();
+        init3DScene();
+
+        // Setup pose detection for each camera
+        videos.forEach((video, index) => {
+            const canvas = index === 0 ? canvas1 : canvas2;
+            
+            setupPoseDetection(video, (results) => {
+                render2DResults(results, canvas);
+                
+                // Use the first camera's data for rep counting and 3D model
+                if (index === 0 && results.poseLandmarks) {
+                    updateRepCounter(results.poseLandmarks);
+                    update3DScene(results.poseLandmarks);
+                }
+            });
+        });
+
+    } catch (error) {
+        console.error("Failed to initialize application:", error);
+        alert("Error: Could not access cameras. Please ensure you have a camera connected and have granted permission.");
+    }
+};

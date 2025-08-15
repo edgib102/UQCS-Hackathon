@@ -7,9 +7,21 @@
     <link rel="stylesheet" href="static/style.css">
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.1/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.156.0/build/three.min.js"></script>
+
     <script src="/static/script.js" type="module"></script>
+    <script src="/static/posedata.js" type="module"></script>
+    <script src="/static/pose3d.js" type="module"></script>
+
 </head>
 <body>
+    <canvas id="pose3dCanvas"></canvas>
+    <div class="stats-container">
+        <p>Reps completed: <span id="repCount">0</span></p>
+        <p>Left knee angle: <span id="leftKneeAngle">0</span>°</p>
+        <p>Right knee angle: <span id="rightKneeAngle">0</span>°</p>
+        <p>Bottom reached: <span id="squatDepthReached">false</span></p>
+    </div>
     <h2>Camera 1</h2>
     <video id="webcam1" autoplay playsinline width="640" height="480"></video>
     <canvas id="output1" width="640" height="480"></canvas>
@@ -30,9 +42,5 @@
       
     </div> -->
 
-    <!-- <div class="stats-container">
-        <h2>Rep count: <span id="rep-counter">0</span></h2>
-        <h2>Squat Depth Reached: <span id="squat-depth">false</span></h2>
-    </div> -->
 </body>
 </html>
