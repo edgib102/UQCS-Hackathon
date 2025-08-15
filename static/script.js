@@ -60,9 +60,10 @@ function render2DResults(results, canvas) {
 
     if (results.poseLandmarks) {
         // Only draw body landmarks, excluding the head (landmarks 0-10)
-        const bodyConnections = POSE_CONNECTIONS.filter(([start, end]) => start > 10 && end > 10);
-        drawConnectors(ctx, results.poseLandmarks, bodyConnections, { color: '#00FF00', lineWidth: 4 });
-        drawLandmarks(ctx, results.poseLandmarks.slice(11), { color: '#FF0000', radius: 2 });
+        // Add 'window.' to access the global MediaPipe variables
+        const bodyConnections = window.POSE_CONNECTIONS.filter(([start, end]) => start > 10 && end > 10);
+        window.drawConnectors(ctx, results.poseLandmarks, bodyConnections, { color: '#00FF00', lineWidth: 4 });
+        window.drawLandmarks(ctx, results.poseLandmarks.slice(11), { color: '#FF0000', radius: 2 });
     }
     ctx.restore();
 }
