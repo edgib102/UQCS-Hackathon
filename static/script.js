@@ -42,9 +42,17 @@ function getPose() {
     canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
     canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
     if (results.poseLandmarks) {
-      drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS,
+      // Filter connections to exclude any that involve head landmarks (0–10)
+      const bodyConnections = POSE_CONNECTIONS.filter(
+        ([startIdx, endIdx]) => startIdx > 10 && endIdx > 10
+      );
+
+      drawConnectors(canvasCtx, results.poseLandmarks, bodyConnections,
         { color: '#00FF00', lineWidth: 4 });
-      drawLandmarks(canvasCtx, results.poseLandmarks,
+
+      // Draw only landmarks from 11 onwards (skip head)
+      const bodyLandmarks = results.poseLandmarks.slice(11);
+      drawLandmarks(canvasCtx, bodyLandmarks, 
         { color: '#FF0000', lineWidth: 1, radius: 1 });
     }
     canvasCtx.restore();
