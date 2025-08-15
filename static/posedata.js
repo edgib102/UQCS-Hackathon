@@ -3,5 +3,6 @@ export let latestPose = null;
 
 // Export a function to update it
 export function updatePose(data) {
-  latestPose = data;
+  console.log(data)
+
 }
