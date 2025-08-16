@@ -5,10 +5,11 @@ export let rightKneeAngle = null;      // right knee angle in degrees
 export let squatDepthReached = false;  // true if bottom reached in current rep
 export let repCount = 0;               // total reps completed
 export let repState = 'STANDING';      // FSM: STANDING, DESCENDING, BOTTOM, ASCENDING
+export let stance = 'UNKNOWN';         // FRONT or SIDE
 
 // ---- Thresholds (tweak for camera distance / user height) ----
 const STANDING_THRESHOLD = 160;        // angle above which we consider user standing
-const BOTTOM_THRESHOLD = 100;           // angle below which we consider squat bottom
+const BOTTOM_THRESHOLD = 100;          // angle below which we consider squat bottom
 const KNEE_VISIBILITY_THRESHOLD = 0.2; // minimum visibility to count knee
 
 // ---- Main pose update function ----
@@ -21,47 +22,83 @@ export function updatePose(results) {
   const leftKneeLandmark = landmarks[25];
   const rightKneeLandmark = landmarks[26];
 
-  // Skip if either knee is not visible enough
-  if (leftKneeLandmark.visibility < KNEE_VISIBILITY_THRESHOLD && 
-      rightKneeLandmark.visibility < KNEE_VISIBILITY_THRESHOLD) {
-    console.log('Knee(s) not visible, skipping rep detection');
+  const leftVisible = leftKneeLandmark.visibility >= KNEE_VISIBILITY_THRESHOLD;
+  const rightVisible = rightKneeLandmark.visibility >= KNEE_VISIBILITY_THRESHOLD;
+
+  // ---- Determine stance ----
+  if (leftVisible && rightVisible) {
+    stance = 'FRONT';
+  } else if (leftVisible || rightVisible) {
+    stance = 'SIDE';
+  } else {
+    stance = 'UNKNOWN';
+    console.log('No knees visible, skipping rep detection');
     return;
   }
 
-  // ----- Calculate knee angles -----
-  leftKneeAngle = calculateAngle(landmarks[23], leftKneeLandmark, landmarks[27]);  // hip → knee → ankle
-  rightKneeAngle = calculateAngle(landmarks[24], rightKneeLandmark, landmarks[28]);
-  const minKnee = Math.min(leftKneeAngle, rightKneeAngle);  // use smaller knee angle for FSM
+  // ---- Calculate knee angles (if visible) ----
+  if (leftVisible) {
+    leftKneeAngle = calculateAngle(landmarks[23], leftKneeLandmark, landmarks[27]);  // hip → knee → ankle
+  } else {
+    leftKneeAngle = null;
+  }
 
-  // ----- Finite State Machine for squat -----
+  if (rightVisible) {
+    rightKneeAngle = calculateAngle(landmarks[24], rightKneeLandmark, landmarks[28]);
+  } else {
+    rightKneeAngle = null;
+  }
+
+  // ---- Determine "effective knee angle(s)" for FSM ----
+  let atStanding = false;
+  let atBottom = false;
+
+  if (stance === 'FRONT') {
+    // Both knees must meet the condition
+    atStanding = (leftKneeAngle > STANDING_THRESHOLD && rightKneeAngle > STANDING_THRESHOLD);
+    atBottom   = (leftKneeAngle < BOTTOM_THRESHOLD  && rightKneeAngle < BOTTOM_THRESHOLD);
+  } else if (stance === 'SIDE') {
+    // Only the visible knee matters
+    const visibleKneeAngle = leftKneeAngle ?? rightKneeAngle;
+    atStanding = (visibleKneeAngle > STANDING_THRESHOLD);
+    atBottom   = (visibleKneeAngle < BOTTOM_THRESHOLD);
+  }
+
+  // ---- Finite State Machine for squat ----
   switch (repState) {
     case 'STANDING':
-      if (minKnee < STANDING_THRESHOLD) repState = 'DESCENDING';
+      if (!atStanding) repState = 'DESCENDING';
       break;
 
     case 'DESCENDING':
-      if (minKnee < BOTTOM_THRESHOLD) repState = 'BOTTOM';
+      if (atBottom) repState = 'BOTTOM';
       break;
 
     case 'BOTTOM':
-      if (minKnee > BOTTOM_THRESHOLD) {
+      if (!atBottom) {
         repState = 'ASCENDING';
         squatDepthReached = true;  // bottom reached, now ascending
       }
       break;
 
     case 'ASCENDING':
-      if (minKnee > STANDING_THRESHOLD) {
+      if (atStanding) {
         repState = 'STANDING';
-        repCount += 1;             // completed rep
+        if (squatDepthReached) {
+          repCount += 1;           // completed rep
+        }
         squatDepthReached = false; // reset for next rep
       }
       break;
   }
 
-  // ----- Debug logs -----
-  console.log(`State: ${repState}, Rep count: ${repCount}, Depth reached: ${squatDepthReached}`);
-  console.log(`Left knee angle: ${leftKneeAngle.toFixed(1)}°, Right knee angle: ${rightKneeAngle.toFixed(1)}°`);
+  // ---- Debug logs ----
+  console.log(
+    `Stance: ${stance}, State: ${repState}, Reps: ${repCount}, Depth: ${squatDepthReached}`
+  );
+  console.log(
+    `Left knee: ${leftKneeAngle?.toFixed(1) ?? 'N/A'}°, Right knee: ${rightKneeAngle?.toFixed(1) ?? 'N/A'}°`
+  );
 }
 
 // ---- Helper function: calculate angle between three points ----
@@ -81,5 +118,5 @@ function calculateAngle(a, b, c) {
 }
 
 export function getPoseStats() {
-    return { repCount, squatDepthReached };
+  return { repCount, squatDepthReached, stance };
 }

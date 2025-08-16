@@ -57,6 +57,11 @@ export function init3DScene(canvas) {
     // Render loop
     function animate() {
         requestAnimationFrame(animate);
+            // Rotate the skeleton group slowly
+        if (skeletonGroup) {
+            skeletonGroup.rotation.y += 0.01; // rotate around Y axis
+            // skeletonGroup.rotation.x += 0.005; // uncomment if you also want tilt
+        }
         renderer.render(scene, camera);
     }
     animate();
