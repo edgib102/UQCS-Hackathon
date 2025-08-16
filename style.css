@@ -108,11 +108,13 @@ video, .output-canvas { position: absolute; top: 0; left: 0; width: 100%; height
 .stat-card p { margin: 0; font-size: 1.5em; font-weight: bold; }
 
 /* --- REPORT VIEW RE-STYLED --- */
-.report-layout-grid {
+/* MODIFIED: This grid now only controls the top section (summary + 3D) */
+.report-main-grid {
     display: grid;
-    grid-template-columns: 1.2fr 1fr;
+    grid-template-columns: 1fr 1fr; /* Changed to 1fr 1fr for a more balanced look */
     gap: 30px;
     align-items: stretch;
+    margin-bottom: 30px; /* Add margin to separate it from the new chart section */
 }
 
 .report-col-main, .report-col-visuals {
@@ -126,7 +128,6 @@ video, .output-canvas { position: absolute; top: 0; left: 0; width: 100%; height
     display: flex;
     align-items: center;
     gap: 20px;
-    /* width: 100%; */
     background-color: #2a2a2a;
     padding: 20px;
     border-radius: 8px;
@@ -167,10 +168,26 @@ video, .output-canvas { position: absolute; top: 0; left: 0; width: 100%; height
 .breakdown-dot.consistency { background-color: #39CCCC; }
 
 /* Column 2: Visuals */
-.playback-container { position: relative; width: 100%; flex-grow: 1; }
+.playback-container { 
+    position: relative; 
+    width: 100%; 
+    height: 100%; /* Allow it to fill the column */
+    min-height: 400px; /* Give it a substantial minimum height */
+}
 #pose3dCanvas, #playbackCanvas { border-radius: 8px; background-color: #1a1a1a; width: 100%; height: 100%; }
 .playback-text { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 5px; font-size: 12px; }
-.chart-container { margin: 0; height: 280px; width: 100%; flex-shrink: 0; }
+
+/* NEW: Styles for the full-width chart container */
+.chart-container-wrapper {
+    padding: 20px;
+    background-color: #2a2a2a; /* Give it a subtle background */
+    border-radius: 8px;
+}
+.chart-container { 
+    margin: 0; 
+    height: 350px; /* INCREASED HEIGHT: Makes the chart much less squished */
+    width: 100%; 
+}
 
 /* Report Footer */
 .report-footer { margin-top: 30px; border-top: 1px solid #333; padding-top: 25px; text-align: center; }
@@ -178,8 +195,10 @@ video, .output-canvas { position: absolute; top: 0; left: 0; width: 100%; height
 
 /* Responsive Design */
 @media (max-width: 900px) {
-    .report-layout-grid { grid-template-columns: 1fr; }
-    /* The main-content is already single-column, so no rule needed here */
+    /* MODIFIED: Target the new grid class */
+    .report-main-grid { 
+        grid-template-columns: 1fr; 
+    }
 }
 @media (max-width: 600px) {
     .report-summary { flex-direction: column; text-align: center; }
