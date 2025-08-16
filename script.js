@@ -1,5 +1,6 @@
 import { updatePose, getPoseStats, resetPoseStats } from "./posedata.js";
 import { createLiveScene, createPlaybackScene } from "./pose3d.js";
+import { renderHipHeightChart } from "./chart.js";
 
 // --- Configuration ---
 const SQUAT_TARGET = 5;
@@ -7,7 +8,7 @@ const SQUAT_TARGET = 5;
 // --- DOM Elements ---
 const videoElement = document.getElementById('video');
 const outputCanvas = document.getElementById('outputCanvas');
-const canvasCtx = outputCanvas.getContext('2d');
+let canvasCtx;
 const playbackCanvas = document.getElementById('playbackCanvas');
 
 const startView = document.getElementById('startView');
@@ -24,11 +25,10 @@ const playButton = document.getElementById('playButton');
 let mediaRecorder;
 let recordedChunks = [];
 let recordedLandmarks = [];
+let hipHeightData = [];
+let hipChartInstance;
 let isSessionRunning = false;
 let liveScene, playbackScene;
-
-// --- Initialize Live 3D Scene ---
-liveScene = createLiveScene(document.getElementById('pose3dCanvas'));
 
 // --- MediaPipe Pose ---
 const pose = new Pose({
@@ -54,31 +54,47 @@ const camera = new Camera(videoElement, {
 
 // --- Main Application Logic ---
 function onResults(results) {
-    if (!videoElement.videoWidth) return;
+    if (!isSessionRunning || !videoElement.videoWidth) return;
     
+    // --- 1. Initial UI Setup ---
     if (loadingElement.style.display !== 'none') {
         loadingElement.style.display = 'none';
         videoElement.style.display = 'block';
     }
     
+    // --- 2. Draw the Video Frame and Skeleton ---
     drawFrame(results);
     
-    if (results.poseWorldLandmarks) {
-        liveScene.update(results.poseWorldLandmarks);
-        // Store a deep copy of the landmarks for playback
-        recordedLandmarks.push(JSON.parse(JSON.stringify(results.poseWorldLandmarks)));
-    }
-    
-    updatePose(results);
-    const stats = getPoseStats();
-    
-    document.getElementById('rep-counter').innerText = stats.repCount;
-    document.getElementById('rep-quality').innerText = stats.repQuality;
-    document.getElementById('depth').innerText = stats.depth ? `${stats.depth.toFixed(0)}°` : 'N/A';
-    document.getElementById('symmetry').innerText = stats.symmetry ? `${stats.symmetry.toFixed(0)}°` : 'N/A';
-    
-    if (stats.repCount >= SQUAT_TARGET) {
-        stopSession();
+    // --- 3. Process Pose Data (if available) ---
+    if (results.poseLandmarks) {
+        // Update the 3D scene
+        if (results.poseWorldLandmarks) {
+            liveScene.update(results.poseWorldLandmarks);
+            recordedLandmarks.push(JSON.parse(JSON.stringify(results.poseWorldLandmarks)));
+        }
+
+        // Get hip height for the chart
+        const leftHip = results.poseLandmarks[23];
+        const rightHip = results.poseLandmarks[24];
+        if (leftHip.visibility > 0.5 && rightHip.visibility > 0.5) {
+            const avgHipY = (leftHip.y + rightHip.y) / 2;
+            hipHeightData.push(avgHipY);
+        }
+
+        // --- 4. Run Analysis & Update Stats ---
+        updatePose(results);
+        const stats = getPoseStats();
+
+        // Update the live stats display
+        document.getElementById('rep-counter').innerText = stats.repCount;
+        document.getElementById('rep-quality').innerText = stats.repQuality;
+        document.getElementById('depth').innerText = stats.depth ? `${stats.depth.toFixed(0)}°` : 'N/A';
+        document.getElementById('symmetry').innerText = stats.symmetry ? `${stats.symmetry.toFixed(0)}°` : 'N/A';
+        
+        // Check if the session is complete
+        if (stats.repCount >= SQUAT_TARGET) {
+            stopSession();
+        }
     }
 }
 
@@ -97,6 +113,14 @@ function drawFrame(results) {
 
 // --- Session & Playback Control ---
 async function startSession() {
+    // Initialize scenes and contexts now that the page is loaded
+    if (!liveScene) {
+        liveScene = createLiveScene(document.getElementById('pose3dCanvas'));
+    }
+    if (!canvasCtx) {
+        canvasCtx = outputCanvas.getContext('2d');
+    }
+    
     isSessionRunning = true;
     startView.style.display = 'none';
     reportView.style.display = 'none';
@@ -136,12 +160,14 @@ function stopSession() {
 function startPlayback() {
     let frame = 0;
     const animate = () => {
-        if (frame >= recordedLandmarks.length) {
-            frame = 0; // Loop the playback
+        if (!isSessionRunning) { // Stop animation if session is reset
+            if (frame >= recordedLandmarks.length) {
+                frame = 0; // Loop the playback
+            }
+            playbackScene.update(recordedLandmarks[frame]);
+            frame++;
+            requestAnimationFrame(animate);
         }
-        playbackScene.update(recordedLandmarks[frame]);
-        frame++;
-        requestAnimationFrame(animate);
     };
     animate();
     playButton.disabled = true;
@@ -153,14 +179,28 @@ function resetSession() {
     reportView.style.display = 'none';
     startView.style.display = 'block';
     resetPoseStats();
+
+    // Clear recorded data
     recordedLandmarks = [];
+    hipHeightData = [];
+    isSessionRunning = true; // Hack to stop playback animation loop
+
+    // Destroy old chart instance
+    if (hipChartInstance) {
+        hipChartInstance.destroy();
+    }
+    
     playButton.disabled = false;
     playButton.innerText = "Play 3D Reps";
 
+    // Reset UI text
     document.getElementById('rep-counter').innerText = '0';
     document.getElementById('rep-quality').innerText = 'N/A';
     document.getElementById('depth').innerText = 'N/A';
     document.getElementById('symmetry').innerText = 'N/A';
+
+    // Set back to false after a short delay
+    setTimeout(() => { isSessionRunning = false; }, 100);
 }
 
 function generateReport() {
@@ -178,6 +218,11 @@ function generateReport() {
     document.getElementById('report-depth-avg').innerText = `${avgDepth.toFixed(0)}°`;
     document.getElementById('report-symmetry-avg').innerText = `${avgSymmetry.toFixed(0)}°`;
     document.getElementById('report-valgus-count').innerText = `${valgusCount} of ${SQUAT_TARGET} reps`;
+    
+    // Render the Hip Height Chart
+    const hipHeightChartCanvas = document.getElementById('hipHeightChart'); // Get the canvas element
+    hipChartInstance = renderHipHeightChart(hipHeightChartCanvas, hipHeightData); // Pass the element to the function
+
 }
 
 // --- Event Listeners ---

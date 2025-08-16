@@ -8,7 +8,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
-</head><body>
+</head>
+<body>
     <div class="container">
         <header>
             <h1>Fix Your Squat</h1>
@@ -79,15 +80,24 @@
                          <p class="playback-text">3D PLAYBACK</p>
                     </div>
                 </div>
-                 <button id="resetButton">Go Again</button>
+                
+                <div class="chart-container">
+                    <canvas id="hipHeightChart"></canvas>
+                </div>
+
+                <button id="resetButton">Go Again</button>
             </div>
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     
+    <script src="chart.js" type="module"></script>
+    <script src="pose3d.js" type="module"></script>
+    <script src="posedata.js" type="module"></script>
     <script src="script.js" type="module"></script>
 </body>
 </html>
