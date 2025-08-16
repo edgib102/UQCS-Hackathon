@@ -9,7 +9,7 @@ const CONNECTIONS = [
 const LANDMARK_COLORS = {
     LEFT: new THREE.Color(0x00CFFF),
     RIGHT: new THREE.Color(0xFF9E00),
-    CENTER: new THREE.Color(0xDDDDDD)
+    CENTER: new THREE.Color(0xe0e0e0)
 };
 const LEFT_INDICES = [11, 13, 15, 23, 25, 27, 29, 31];
 const RIGHT_INDICES = [12, 14, 16, 24, 26, 28, 30, 32];
@@ -72,9 +72,20 @@ class PoseScene {
         }
 
         CONNECTIONS.forEach(conn => {
-            let color = LANDMARK_COLORS.CENTER;
-            if (LEFT_INDICES.includes(conn[0])) color = LANDMARK_COLORS.LEFT;
-            else if (RIGHT_INDICES.includes(conn[0])) color = LANDMARK_COLORS.RIGHT;
+            let color;
+            const isShoulderLine = (conn.includes(11) && conn.includes(12));
+            const isHipLine = (conn.includes(23) && conn.includes(24));
+
+            if (isShoulderLine || isHipLine) {
+                color = LANDMARK_COLORS.CENTER; 
+            } else if (LEFT_INDICES.includes(conn[0])) { 
+                color = LANDMARK_COLORS.LEFT;
+            } else if (RIGHT_INDICES.includes(conn[0])) { 
+                color = LANDMARK_COLORS.RIGHT;
+            } else {
+                color = LANDMARK_COLORS.CENTER; 
+            }
+
             const line = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color, linewidth: 2 }));
             this.boneLines.push(line);
             this.skeletonGroup.add(line);
@@ -124,17 +135,21 @@ class PoseScene {
         const valgusColor = new THREE.Color(0xFF4136);
         
         CONNECTIONS.forEach((conn, idx) => {
-            // Check if the connection involves the legs (hip, knee, or ankle landmarks)
+            // Check if the connection is a leg bone (thigh or shin)
             const isLegConnection = ([23, 25, 27, 24, 26, 28].includes(conn[0]) && [23, 25, 27, 24, 26, 28].includes(conn[1]));
+            
+            // --- FIX ---
+            // Explicitly identify and exclude the hip-to-hip line from this color update
+            const isHipLine = (conn.includes(23) && conn.includes(24));
 
-            if (isLegConnection) {
+            if (isLegConnection && !isHipLine) {
                 const line = this.boneLines[idx];
                 let newColor;
 
                 if (hasKneeValgus) {
                     newColor = valgusColor;
                 } else {
-                    // Re-calculate the default color
+                    // Re-calculate the default color only for the actual legs
                     newColor = LANDMARK_COLORS.CENTER;
                     if (LEFT_INDICES.includes(conn[0])) newColor = LANDMARK_COLORS.LEFT;
                     else if (RIGHT_INDICES.includes(conn[0])) newColor = LANDMARK_COLORS.RIGHT;
@@ -152,5 +167,5 @@ export function createLiveScene(canvas) {
 }
 
 export function createPlaybackScene(canvas) {
-    return new PoseScene(canvas, { autoRotate: false }); // No auto-rotate for playback
+    return new PoseScene(canvas, { autoRotate: false });
 }
