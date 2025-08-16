@@ -5,48 +5,40 @@ import { init3DScene, updateSkeleton } from "./pose3d.js";
 const videoElement = document.getElementById('video');
 const outputCanvas = document.getElementById('outputCanvas');
 const canvasCtx = outputCanvas.getContext('2d');
-const repCounterElement = document.getElementById('rep-counter');
-const squatDepthElement = document.getElementById('squat-depth');
 const pose3dCanvas = document.getElementById('pose3dCanvas');
+const loadingElement = document.getElementById('loading');
 
-// ---- Define landmark groups (indices from MediaPipe Pose) ----
-const LEFT_LANDMARKS = [11, 13, 15, 23, 25, 27];   // shoulder, elbow, wrist, hip, knee, ankle
-const RIGHT_LANDMARKS = [12, 14, 16, 24, 26, 28];
-const MID_LANDMARKS = [];             // nose, eyes, ears, etc. (adjust if needed)
+// --- Landmark & Connection Definitions ---
+// For 2D drawing
+const LANDMARK_GROUPS = {
+    LEFT: {
+        indices: [11, 13, 15, 23, 25, 27], // L_Shoulder, L_Elbow, L_Wrist, L_Hip, L_Knee, L_Ankle
+        color: '#00CFFF'
+    },
+    RIGHT: {
+        indices: [12, 14, 16, 24, 26, 28], // R_Shoulder, R_Elbow, R_Wrist, R_Hip, R_Knee, R_Ankle
+        color: '#FF9E00'
+    },
+    MID: {
+        indices: [],
+        color: '#DDDDDD'
+    }
+};
 
-// ---- Define colour scheme ----
-const LEFT_COLOR = '#00CFFF';   // green
-const MID_COLOR = '#DDDDDD';  // blue
-const RIGHT_COLOR = '#FF9E00';    // red
-
-// ---- Define connector groups (pairs of landmark indices) ----
-const LEFT_CONNECTIONS = [
-  [11, 13], [13, 15],   // left arm
-  [23, 25], [25, 27],   // left leg
-  [11, 23]              // left torso
-];
-
-const RIGHT_CONNECTIONS = [
-  [12, 14], [14, 16],   // right arm
-  [24, 26], [26, 28],   // right leg
-  [12, 24],              // right torso
-// torso diagonals
-];
-
-const MID_CONNECTIONS = [
-  [11, 12], // shoulders
-  [23, 24], // hips
-];
-
-// New stat elements
-const symmetryElement = document.getElementById('symmetry');
-const romElement = document.getElementById('rom');
-const depthElement = document.getElementById('depth');
-const valgusElement = document.getElementById('valgus');
-
-const eccTimeElement = document.getElementById('ecc-time');
-const conTimeElement = document.getElementById('con-time');
-const repQualityElement = document.getElementById('rep-quality');
+const CONNECTION_GROUPS = {
+    LEFT: {
+        pairs: [[11, 13], [13, 15], [23, 25], [25, 27], [11, 23]],
+        color: '#00CFFF'
+    },
+    RIGHT: {
+        pairs: [[12, 14], [14, 16], [24, 26], [26, 28], [12, 24]],
+        color: '#FF9E00'
+    },
+    MID: {
+        pairs: [[11, 12], [23, 24]],
+        color: '#DDDDDD'
+    }
+};
 
 // --- Initialize 3D Scene ---
 init3DScene(pose3dCanvas);
@@ -57,15 +49,23 @@ const pose = new Pose({
 });
 
 pose.setOptions({
-    modelComplexity: 2,
+    modelComplexity: 1, // Using 1 for better performance, 2 is more accurate but slower
     smoothLandmarks: true,
     enableSegmentation: false,
-    minDetectionConfidence: 0.75,
-    minTrackingConfidence: 0.75
+    minDetectionConfidence: 0.7,
+    minTrackingConfidence: 0.7
 });
 
 // --- Main Callback ---
 function onResults(results) {
+    if (!videoElement.videoWidth) return;
+
+    // Show video and hide loading spinner on first result
+    if (loadingElement.style.display !== 'none') {
+        loadingElement.style.display = 'none';
+        videoElement.style.display = 'block';
+    }
+    
     outputCanvas.width = videoElement.videoWidth;
     outputCanvas.height = videoElement.videoHeight;
 
@@ -74,65 +74,40 @@ function onResults(results) {
     canvasCtx.drawImage(videoElement, 0, 0, outputCanvas.width, outputCanvas.height);
 
     if (results.poseLandmarks) {
-        drawConnectors(canvasCtx, results.poseLandmarks, LEFT_CONNECTIONS, {
-            color: LEFT_COLOR, lineWidth: 4
-        });
-        drawLandmarks(canvasCtx,
-            LEFT_LANDMARKS.map(i => results.poseLandmarks[i]),
-            { color: LEFT_COLOR, lineWidth: 2 }
-        );
+        // Draw 2D landmarks and connectors
+        for (const group of Object.values(CONNECTION_GROUPS)) {
+            drawConnectors(canvasCtx, results.poseLandmarks, group.pairs, { color: group.color, lineWidth: 4 });
+        }
+        for (const group of Object.values(LANDMARK_GROUPS)) {
+            const landmarks = group.indices.map(i => results.poseLandmarks[i]);
+            drawLandmarks(canvasCtx, landmarks, { color: group.color, lineWidth: 2 });
+        }
 
-        // Right side
-        drawConnectors(canvasCtx, results.poseLandmarks, RIGHT_CONNECTIONS, {
-            color: RIGHT_COLOR, lineWidth: 4
-        });
-        drawLandmarks(canvasCtx,
-            RIGHT_LANDMARKS.map(i => results.poseLandmarks[i]),
-            { color: RIGHT_COLOR, lineWidth: 2 }
-        );
-
-        // Middle
-        drawConnectors(canvasCtx, results.poseLandmarks, MID_CONNECTIONS, {
-            color: MID_COLOR, lineWidth: 4
-        });
-        drawLandmarks(canvasCtx,
-            MID_LANDMARKS.map(i => results.poseLandmarks[i]),
-            { color: MID_COLOR, lineWidth: 2 }
-        );
-
+        // Update pose data logic
         updatePose(results);
-        const { 
-            repCount, 
-            squatDepthReached, 
-            symmetry, 
-            rangeOfMotion, 
-            depth, 
-            kneeValgus, 
-            eccentricTime, 
-            concentricTime, 
-            repQuality 
-        } = getPoseStats();
+        updateUI(getPoseStats());
 
-        // --- UI Updates ---
-        repCounterElement.innerText = repCount;
-        squatDepthElement.innerText = squatDepthReached ? "Yes" : "No";
-        symmetryElement.innerText = symmetry ? symmetry.toFixed(1) : "N/A";
-        romElement.innerText = (rangeOfMotion.min !== null && rangeOfMotion.max !== null)
-            ? (rangeOfMotion.max - rangeOfMotion.min).toFixed(1)
-            : "N/A";
-        depthElement.innerText = depth ? depth.toFixed(1) : "N/A";
-        valgusElement.innerText = kneeValgus ? "Yes ⚠️" : "No";
-
-        eccTimeElement.innerText = eccentricTime ? eccentricTime.toFixed(1) : "0.0";
-        conTimeElement.innerText = concentricTime ? concentricTime.toFixed(1) : "0.0";
-        repQualityElement.innerText = repQuality;
+        // Update 3D skeleton if world landmarks are available
+        if (results.poseWorldLandmarks) {
+            updateSkeleton(results.poseWorldLandmarks);
+        }
     }
-
-    if (results.poseWorldLandmarks) {
-        updateSkeleton(results.poseWorldLandmarks);
-    }
-
     canvasCtx.restore();
+}
+
+function updateUI(stats) {
+    document.getElementById('rep-counter').innerText = stats.repCount;
+    document.getElementById('rep-quality').innerText = stats.repQuality;
+    document.getElementById('depth').innerText = stats.depth ? `${stats.depth.toFixed(0)}°` : 'N/A';
+    document.getElementById('rom').innerText = (stats.rangeOfMotion.min !== null) ? `${(stats.rangeOfMotion.max - stats.rangeOfMotion.min).toFixed(0)}°` : 'N/A';
+    document.getElementById('symmetry').innerText = stats.symmetry ? `${stats.symmetry.toFixed(0)}°` : 'N/A';
+    
+    const valgusEl = document.getElementById('valgus');
+    valgusEl.innerText = stats.kneeValgus ? "WARNING" : "GOOD";
+    valgusEl.classList.toggle('warning', stats.kneeValgus);
+    
+    document.getElementById('ecc-time').innerText = `${stats.eccentricTime.toFixed(1)}s`;
+    document.getElementById('con-time').innerText = `${stats.concentricTime.toFixed(1)}s`;
 }
 
 pose.onResults(onResults);

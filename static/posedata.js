@@ -1,156 +1,122 @@
-// ---- Exported variables ----
-export let latestPose = null;            // latest MediaPipe landmarks
-export let leftKneeAngle = null;         // left knee angle in degrees
-export let rightKneeAngle = null;        // right knee angle in degrees
-export let squatDepthReached = false;    // true if bottom reached in current rep
-export let repCount = 0;                 // total reps completed
-export let repState = 'STANDING';        // FSM: STANDING, DESCENDING, BOTTOM, ASCENDING
-export let stance = 'UNKNOWN';           // FRONT or SIDE
-export let repStartTime = null;        // timestamp when rep started
-export let eccentricTime = 0;          // time descending (seconds)
-export let concentricTime = 0;         // time ascending (seconds)
-export let repQuality = "N/A";         // Good / Needs work / Bad
+// ---- Exported variables for state management ----
+export let latestPose = null;
+export let repCount = 0;
+export let repState = 'UP'; // FSM: UP, DOWN
+export let repQuality = "N/A";
+export let eccentricTime = 0;
+export let concentricTime = 0;
+export let symmetry = null;
+export let rangeOfMotion = { min: null, max: null };
+export let depth = null;
+export let kneeValgus = false;
 
+// ---- Private state variables ----
+let repStartTime = null;
 
-
-// ---- New analytics ----
-export let symmetry = null;              // |leftKneeAngle - rightKneeAngle|
-export let rangeOfMotion = {             // lowest & highest knee angles seen
-  min: null,
-  max: null,
-};
-export let depth = null;                 // difference between standing and bottom angle
-export let kneeValgus = false;           // true if knees caving in
-
-// ---- Thresholds (tweak for camera distance / user height) ----
-const STANDING_THRESHOLD = 160;          // angle above which we consider user standing
-const BOTTOM_THRESHOLD = 100;            // angle below which we consider squat bottom
-const KNEE_VISIBILITY_THRESHOLD = 0.5;   // minimum visibility to count knee
-const SYMMETRY_THRESHOLD = 15;           // max acceptable L/R angle difference
-const VALGUS_THRESHOLD = 0.05;           // % inward knee collapse relative to hip-ankle line
-const HIP_DEPTH_THRESHOLD = 0.5;       // normalized y (0 top, 1 bottom of frame)
+// ---- Thresholds (tweak for desired difficulty) ----
+const STANDING_THRESHOLD = 160;     // Angle above which user is considered standing
+const SQUAT_THRESHOLD = 110;        // Angle below which a squat is registered
+const KNEE_VISIBILITY_THRESHOLD = 0.65;
+const SYMMETRY_THRESHOLD = 20;      // Max acceptable L/R knee angle difference in degrees
+const VALGUS_THRESHOLD = 0.05;      // Threshold for knee caving inward
 
 // ---- Main pose update function ----
 export function updatePose(results) {
-  if (!results.poseLandmarks) return;
+    if (!results.poseLandmarks) return;
 
-  const landmarks = results.poseLandmarks;
-  latestPose = landmarks;
+    latestPose = results.poseLandmarks;
+    const { left, right } = getLandmarkProxy(latestPose);
 
-  const leftHip = landmarks[23];
-  const rightHip = landmarks[24];
-  const leftKnee = landmarks[25];
-  const rightKnee = landmarks[26];
-  const leftAnkle = landmarks[27];
-  const rightAnkle = landmarks[28];
+    const leftVisible = left.knee.visibility > KNEE_VISIBILITY_THRESHOLD;
+    const rightVisible = right.knee.visibility > KNEE_VISIBILITY_THRESHOLD;
 
-  const leftVisible = leftKnee.visibility >= KNEE_VISIBILITY_THRESHOLD;
-  const rightVisible = rightKnee.visibility >= KNEE_VISIBILITY_THRESHOLD;
+    const leftKneeAngle = leftVisible ? calculateAngle(left.hip, left.knee, left.ankle) : null;
+    const rightKneeAngle = rightVisible ? calculateAngle(right.hip, right.knee, right.ankle) : null;
 
-  // ---- Knee angles ----
-  if (leftVisible) leftKneeAngle = calculateAngle(leftHip, leftKnee, leftAnkle);
-  else leftKneeAngle = null;
+    // --- Analytics ---
+    symmetry = (leftKneeAngle && rightKneeAngle) ? Math.abs(leftKneeAngle - rightKneeAngle) : null;
+    kneeValgus = checkKneeValgus(left, right, leftVisible, rightVisible);
 
-  if (rightVisible) rightKneeAngle = calculateAngle(rightHip, rightKnee, rightAnkle);
-  else rightKneeAngle = null;
+    const visibleAngles = [leftKneeAngle, rightKneeAngle].filter(a => a !== null);
+    if (visibleAngles.length === 0) return; // Cannot proceed without knee angles
 
-  // ---- Symmetry ----
-  symmetry = (leftKneeAngle && rightKneeAngle) ? Math.abs(leftKneeAngle - rightKneeAngle) : null;
-
-  // ---- Range of motion ----
-  const visibleAngles = [leftKneeAngle, rightKneeAngle].filter(a => a !== null);
-  if (visibleAngles.length > 0) {
     const avgAngle = visibleAngles.reduce((a, b) => a + b, 0) / visibleAngles.length;
-    rangeOfMotion.min = (rangeOfMotion.min === null) ? avgAngle : Math.min(rangeOfMotion.min, avgAngle);
-    rangeOfMotion.max = (rangeOfMotion.max === null) ? avgAngle : Math.max(rangeOfMotion.max, avgAngle);
-    depth = rangeOfMotion.max - rangeOfMotion.min;
-  }
 
-  // ---- Knee valgus ----
-  if (leftVisible && rightVisible) {
-    const leftCollapse = Math.abs((leftKnee.x - leftHip.x) / ((leftAnkle.x - leftHip.x) || 1));
-    const rightCollapse = Math.abs((rightKnee.x - rightHip.x) / ((rightAnkle.x - rightHip.x) || 1));
-    kneeValgus = leftCollapse < VALGUS_THRESHOLD || rightCollapse < VALGUS_THRESHOLD;
-  } else {
-    kneeValgus = false;
-  }
+    // Update range of motion for the current rep
+    rangeOfMotion.min = Math.min(rangeOfMotion.min ?? avgAngle, avgAngle);
+    rangeOfMotion.max = Math.max(rangeOfMotion.max ?? avgAngle, avgAngle);
 
-  // ---- Hip depth ----
-  const hipY = (leftHip.y + rightHip.y) / 2;
-  const atBottom = hipY > HIP_DEPTH_THRESHOLD;
-
-  // ---- FSM and timing ----
-  const now = performance.now() / 1000;
-  switch (repState) {
-    case 'STANDING':
-      if (!atBottom) {
-        repState = 'DESCENDING';
+    // ---- Rep Counting Finite State Machine (FSM) ----
+    const now = performance.now();
+    if (repState === 'UP' && avgAngle < SQUAT_THRESHOLD) {
+        repState = 'DOWN';
         repStartTime = now;
-      }
-      break;
+        eccentricTime = 0;
+        concentricTime = 0;
+    } else if (repState === 'DOWN' && avgAngle > STANDING_THRESHOLD) {
+        // Rep completed
+        repCount++;
+        repState = 'UP';
 
-    case 'DESCENDING':
-      if (atBottom) {
-        repState = 'BOTTOM';
-        eccentricTime = now - (repStartTime ?? now);
-      }
-      break;
+        // Calculate metrics for the completed rep
+        depth = rangeOfMotion.max - rangeOfMotion.min;
+        const totalTime = (now - repStartTime) / 1000;
+        
+        // A simple time split; more complex logic could find the exact bottom point
+        eccentricTime = totalTime / 2; 
+        concentricTime = totalTime / 2;
 
-    case 'BOTTOM':
-      if (!atBottom) {
-        repState = 'ASCENDING';
-        squatDepthReached = true;
-        repStartTime = now;
-      }
-      break;
-
-    case 'ASCENDING':
-      if (hipY < HIP_DEPTH_THRESHOLD) {
-        repState = 'STANDING';
-        if (squatDepthReached) {
-          repCount += 1;
-          concentricTime = now - (repStartTime ?? now);
-
-          // ---- Rep quality ----
-          repQuality = "Good";
-          if (symmetry && symmetry > SYMMETRY_THRESHOLD) repQuality = "Needs Work";
-          if (kneeValgus || !squatDepthReached) repQuality = "Bad";
-
-          squatDepthReached = false;
-          rangeOfMotion.min = null;
-          rangeOfMotion.max = null;
+        // Assess rep quality
+        if (depth < (STANDING_THRESHOLD - SQUAT_THRESHOLD - 10) || kneeValgus || (symmetry && symmetry > SYMMETRY_THRESHOLD)) {
+            repQuality = "BAD";
+        } else if (symmetry && symmetry > (SYMMETRY_THRESHOLD / 2)) {
+            repQuality = "OK";
+        } else {
+            repQuality = "GOOD";
         }
-      }
-      break;
-  }
+
+        // Reset ROM for next rep
+        rangeOfMotion = { min: null, max: null };
+    }
 }
 
-// ---- Helper function: calculate angle between three points ----
+// ---- Analytics Helper Functions ----
+
+function checkKneeValgus(left, right, leftVisible, rightVisible) {
+    if (!leftVisible || !rightVisible) return false;
+
+    // A simple valgus check: is the knee significantly inside the hip-ankle line?
+    const leftValgus = left.knee.x < left.ankle.x || left.knee.x > left.hip.x;
+    const rightValgus = right.knee.x > right.ankle.x || right.knee.x < right.hip.x;
+    
+    // A more robust check could be added here using the Z-axis if needed.
+    // For now, we flag if either knee shows this pattern.
+    return leftValgus || rightValgus;
+}
+
+// ---- Geometry Helper ----
 function calculateAngle(a, b, c) {
-  const AB = { x: a.x - b.x, y: a.y - b.y };
-  const CB = { x: c.x - b.x, y: c.y - b.y };
-
-  const dot = AB.x * CB.x + AB.y * CB.y;
-  const magAB = Math.sqrt(AB.x**2 + AB.y**2);
-  const magCB = Math.sqrt(CB.x**2 + CB.y**2);
-
-  const cosAngle = dot / (magAB * magCB);
-
-  const clamped = Math.max(-1, Math.min(1, cosAngle));
-  return Math.acos(clamped) * (180 / Math.PI);
+    const rad = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
+    let deg = Math.abs(rad * (180.0 / Math.PI));
+    return deg > 180 ? 360 - deg : deg;
 }
 
+// ---- Landmark Proxy for easier access ----
+function getLandmarkProxy(landmarks) {
+    return {
+        left: {
+            hip: landmarks[23], knee: landmarks[25], ankle: landmarks[27]
+        },
+        right: {
+            hip: landmarks[24], knee: landmarks[26], ankle: landmarks[28]
+        }
+    };
+}
+
+// ---- Data Exporter ----
 export function getPoseStats() {
-  return { 
-    repCount, 
-    squatDepthReached, 
-    stance, 
-    symmetry, 
-    rangeOfMotion, 
-    depth, 
-    kneeValgus,
-    eccentricTime,
-    concentricTime,
-    repQuality
-  };
+    return {
+        repCount, repQuality, eccentricTime, concentricTime, symmetry,
+        rangeOfMotion, depth, kneeValgus
+    };
 }
