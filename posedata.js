@@ -70,8 +70,8 @@ function calculateValgusState(screenLandmarks, worldLandmarks) {
     // Only count as valgus if knee moves toward midline (inward)
     // For webcam (mirrored), left knee caving in means knee.x > expected
     // right knee caving in means knee.x < expected
-    const leftValgus = (leftKnee.x > leftExpectedKneeX) ? leftValgusRatio : 0;
-    const rightValgus = (rightKnee.x < rightExpectedKneeX) ? rightValgusRatio : 0;
+    const leftValgus = (leftKnee.x < leftExpectedKneeX) ? leftValgusRatio : 0;
+    const rightValgus = (rightKnee.x > rightExpectedKneeX) ? rightValgusRatio : 0;
 
     return {
         left: leftValgus,
