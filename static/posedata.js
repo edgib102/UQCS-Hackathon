@@ -25,7 +25,7 @@ export let kneeValgus = false;           // true if knees caving in
 // ---- Thresholds (tweak for camera distance / user height) ----
 const STANDING_THRESHOLD = 160;          // angle above which we consider user standing
 const BOTTOM_THRESHOLD = 100;            // angle below which we consider squat bottom
-const KNEE_VISIBILITY_THRESHOLD = 0.2;   // minimum visibility to count knee
+const KNEE_VISIBILITY_THRESHOLD = 0.5;   // minimum visibility to count knee
 const SYMMETRY_THRESHOLD = 15;           // max acceptable L/R angle difference
 const VALGUS_THRESHOLD = 0.05;           // % inward knee collapse relative to hip-ankle line
 const HIP_DEPTH_THRESHOLD = 0.5;       // normalized y (0 top, 1 bottom of frame)

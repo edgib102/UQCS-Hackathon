@@ -4,6 +4,36 @@ let scene, camera, renderer, skeletonGroup;
 const jointSpheres = [];
 const boneLines = [];
 
+/** 
+ * Define left, right, and center landmark connections (based on MediaPipe Pose indexes).
+ */
+const LEFT_CONNECTIONS = [
+  [11, 13], [13, 15],   // left arm
+  [23, 25], [25, 27],   // left leg
+  [27, 29], [29, 31],   // left foot
+  [11, 23]              // left torso
+];
+
+const RIGHT_CONNECTIONS = [
+  [12, 14], [14, 16],   // right arm
+  [24, 26], [26, 28],   // right leg
+  [28, 30], [30, 32],   // right foot
+  [12, 24]              // right torso
+];
+
+const CENTER_CONNECTIONS = [
+  [11, 12], // shoulders
+  [23, 24], // hips
+  [11, 23], [12, 24]    // vertical torso
+];
+
+/**
+ * Assign landmark indices to left/right/center for coloring joints.
+ */
+const LEFT_LANDMARKS = [11, 13, 15, 23, 25, 27, 29, 31];
+const RIGHT_LANDMARKS = [12, 14, 16, 24, 26, 28, 30, 32];
+const CENTER_LANDMARKS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 24];
+
 /**
  * Initializes the Three.js scene, camera, and renderer.
  * @param {HTMLCanvasElement} canvas - The canvas element to render the 3D scene on.
@@ -27,7 +57,7 @@ export function init3DScene(canvas) {
     scene.add(light);
     scene.add(new THREE.AmbientLight(0x404040, 1.5));
 
-    // Ground
+    // Ground grid
     const gridHelper = new THREE.GridHelper(5, 10, 0x888888, 0x444444);
     scene.add(gridHelper);
 
@@ -35,32 +65,52 @@ export function init3DScene(canvas) {
     skeletonGroup = new THREE.Group();
     scene.add(skeletonGroup);
 
+    // Materials
+    const leftMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff });  // cyan
+    const rightMaterial = new THREE.LineBasicMaterial({ color: 0xffa500 }); // orange
+    const centerMaterial = new THREE.LineBasicMaterial({ color: 0xff00ff }); // magenta
+
+    const leftSphereMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+    const rightSphereMat = new THREE.MeshBasicMaterial({ color: 0xffa500 });
+    const centerSphereMat = new THREE.MeshBasicMaterial({ color: 0xff00ff });
+
     // Create joint spheres (33 landmarks in Mediapipe Pose)
-    const jointMaterial = new THREE.MeshBasicMaterial({ color: 0x9D00FF });
     const sphereGeo = new THREE.SphereGeometry(0.02, 8, 8);
     for (let i = 0; i < 33; i++) {
-        const sphere = new THREE.Mesh(sphereGeo, jointMaterial);
+        let mat;
+        if (LEFT_LANDMARKS.includes(i)) {
+            mat = leftSphereMat;
+        } else if (RIGHT_LANDMARKS.includes(i)) {
+            mat = rightSphereMat;
+        } else {
+            mat = centerSphereMat;
+        }
+        const sphere = new THREE.Mesh(sphereGeo, mat);
         jointSpheres.push(sphere);
         skeletonGroup.add(sphere);
     }
 
-    // Create bone lines for POSE_CONNECTIONS
-    const boneMaterial = new THREE.LineBasicMaterial({ color: 0x9D00FF });
-    POSE_CONNECTIONS.forEach(() => {
-        const points = [new THREE.Vector3(), new THREE.Vector3()];
-        const geometry = new THREE.BufferGeometry().setFromPoints(points);
-        const line = new THREE.Line(geometry, boneMaterial);
-        boneLines.push(line);
-        skeletonGroup.add(line);
-    });
+    // Helper function to add bone lines
+    function addConnections(connections, material) {
+        connections.forEach(() => {
+            const points = [new THREE.Vector3(), new THREE.Vector3()];
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const line = new THREE.Line(geometry, material);
+            boneLines.push(line);
+            skeletonGroup.add(line);
+        });
+    }
+
+    // Create bone lines
+    addConnections(LEFT_CONNECTIONS, leftMaterial);
+    addConnections(RIGHT_CONNECTIONS, rightMaterial);
+    addConnections(CENTER_CONNECTIONS, centerMaterial);
 
     // Render loop
     function animate() {
         requestAnimationFrame(animate);
-            // Rotate the skeleton group slowly
         if (skeletonGroup) {
-            skeletonGroup.rotation.y += 0.01; // rotate around Y axis
-            // skeletonGroup.rotation.x += 0.005; // uncomment if you also want tilt
+            skeletonGroup.rotation.y += 0.005; // slow rotation
         }
         renderer.render(scene, camera);
     }
@@ -93,8 +143,9 @@ export function updateSkeleton(landmarks) {
         }
     });
 
-    // Update bone positions
-    POSE_CONNECTIONS.forEach((conn, idx) => {
+    // Update bone positions in correct order
+    const allConnections = [...LEFT_CONNECTIONS, ...RIGHT_CONNECTIONS, ...CENTER_CONNECTIONS];
+    allConnections.forEach((conn, idx) => {
         const start = landmarks[conn[0]];
         const end = landmarks[conn[1]];
         if (start.visibility > 0.5 && end.visibility > 0.5) {
@@ -112,7 +163,7 @@ export function updateSkeleton(landmarks) {
         }
     });
 
-    // Auto-frame camera
+    // Auto-frame camera to skeleton center
     const box = new THREE.Box3().setFromObject(skeletonGroup);
     const center = box.getCenter(new THREE.Vector3());
     camera.lookAt(center);
