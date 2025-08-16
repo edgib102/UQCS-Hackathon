@@ -44,6 +44,10 @@ const romElement = document.getElementById('rom');
 const depthElement = document.getElementById('depth');
 const valgusElement = document.getElementById('valgus');
 
+const eccTimeElement = document.getElementById('ecc-time');
+const conTimeElement = document.getElementById('con-time');
+const repQualityElement = document.getElementById('rep-quality');
+
 // --- Initialize 3D Scene ---
 init3DScene(pose3dCanvas);
 
@@ -97,7 +101,17 @@ function onResults(results) {
         );
 
         updatePose(results);
-        const { repCount, squatDepthReached, symmetry, rangeOfMotion, depth, kneeValgus } = getPoseStats();
+        const { 
+            repCount, 
+            squatDepthReached, 
+            symmetry, 
+            rangeOfMotion, 
+            depth, 
+            kneeValgus, 
+            eccentricTime, 
+            concentricTime, 
+            repQuality 
+        } = getPoseStats();
 
         // --- UI Updates ---
         repCounterElement.innerText = repCount;
@@ -108,6 +122,10 @@ function onResults(results) {
             : "N/A";
         depthElement.innerText = depth ? depth.toFixed(1) : "N/A";
         valgusElement.innerText = kneeValgus ? "Yes ⚠️" : "No";
+
+        eccTimeElement.innerText = eccentricTime ? eccentricTime.toFixed(1) : "0.0";
+        conTimeElement.innerText = concentricTime ? concentricTime.toFixed(1) : "0.0";
+        repQualityElement.innerText = repQuality;
     }
 
     if (results.poseWorldLandmarks) {
