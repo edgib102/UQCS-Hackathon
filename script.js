@@ -29,17 +29,19 @@ const startButton = document.getElementById('startButton');
 const resetButton = document.getElementById('resetButton');
 const downloadButton = document.getElementById('downloadButton');
 const playButton = document.getElementById('playButton');
+const videoUploadInput = document.getElementById('videoUpload'); // New Line
 
 // --- State Management ---
 let mediaRecorder;
 let recordedChunks = [];
 let recordedLandmarks = [];
-let recordedPoseLandmarks = []; // To find squat start
+let recordedPoseLandmarks = [];
 let hipHeightData = [];
 let hipChartInstance;
 let isSessionRunning = false;
+let isProcessingUpload = false; // New Line
 let liveScene, playbackScene;
-let playbackAnimationId = null; // To control the animation loop
+let playbackAnimationId = null;
 
 // --- MediaPipe Pose ---
 const pose = new Pose({
@@ -71,6 +73,9 @@ function onResults(results) {
     if (loadingElement.style.display !== 'none') {
         loadingElement.style.display = 'none';
         videoElement.style.display = 'block';
+        if (isProcessingUpload) {
+            videoElement.play();
+        }
     }
     
     // --- 2. Draw the Video Frame and Skeleton ---
@@ -149,10 +154,12 @@ async function startSession() {
     }
     
     isSessionRunning = true;
+    isProcessingUpload = false; // New Line
     startView.style.display = 'none';
     reportView.style.display = 'none';
     sessionView.style.display = 'block';
     loadingElement.style.display = 'flex';
+    downloadButton.style.display = 'inline-block'; // New Line
 
     await camera.start();
     
@@ -167,11 +174,57 @@ async function startSession() {
     mediaRecorder.start();
 }
 
+// New function for file upload
+function startUploadSession(file) {
+    if (!liveScene) {
+        liveScene = createLiveScene(document.getElementById('pose3dCanvas'));
+    }
+    if (!canvasCtx) {
+        canvasCtx = outputCanvas.getContext('2d');
+    }
+
+    isSessionRunning = true;
+    isProcessingUpload = true;
+    startView.style.display = 'none';
+    reportView.style.display = 'none';
+    sessionView.style.display = 'block';
+    loadingElement.style.display = 'flex';
+    downloadButton.style.display = 'none'; // New Line
+
+    videoElement.style.display = 'block';
+    videoElement.controls = true;
+    videoElement.muted = false;
+    videoElement.src = URL.createObjectURL(file);
+    videoElement.load();
+    videoElement.onloadeddata = () => {
+        loadingElement.style.display = 'none';
+        processVideoFrames();
+    };
+}
+
+// New function to process frames from a video element
+async function processVideoFrames() {
+    if (!isProcessingUpload) return;
+    
+    if (videoElement.paused || videoElement.ended) {
+        stopSession();
+        return;
+    }
+    
+    await pose.send({ image: videoElement });
+    requestAnimationFrame(processVideoFrames);
+}
+
 function stopSession() {
     isSessionRunning = false;
-    if (mediaRecorder?.state === 'recording') mediaRecorder.stop();
-    camera.stop();
-
+    
+    if (!isProcessingUpload && mediaRecorder?.state === 'recording') {
+        mediaRecorder.stop();
+    }
+    if (!isProcessingUpload) {
+        camera.stop();
+    }
+    
     videoElement.style.display = 'none';
     sessionView.style.display = 'none';
     reportView.style.display = 'block';
@@ -247,7 +300,7 @@ function resetSession() {
 
     // Clear recorded data for the next session
     recordedLandmarks = [];
-    recordedPoseLandmarks = []; // Reset new array
+    recordedPoseLandmarks = [];
     hipHeightData = [];
 
     // Destroy the old chart instance to prevent memory leaks
@@ -332,3 +385,9 @@ function generateReport() {
 startButton.addEventListener('click', startSession);
 resetButton.addEventListener('click', resetSession);
 playButton.addEventListener('click', startPlayback);
+videoUploadInput.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (file) {
+        startUploadSession(file);
+    }
+});
