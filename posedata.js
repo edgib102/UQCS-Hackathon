@@ -1,24 +1,17 @@
 // posedata.js
 
-// ---- State Management ----
-let repHistory = [];
-let repCount = 0;
-let repState = 'STANDING';
-let currentRepData = null;
-
-// ---- Live Rep Data ----
-let lastRepQuality = "N/A";
-let lastRepSymmetry = null;
-let lastRepDepth = null;
-let kneeValgusState = false;
-
-// ---- Smoothing & Thresholds ----
-const angleBuffer = { left: [], right: [] };
-const SMOOTHING_WINDOW = 5;
-export const STANDING_THRESHOLD = 160;
 export const SQUAT_THRESHOLD = 110;
 export const KNEE_VISIBILITY_THRESHOLD = 0.8;
-export const SYMMETRY_THRESHOLD = 20;
+export const STANDING_THRESHOLD = 160;
+
+// ---- 3D Vector Math Helpers ----
+const vec3 = {
+    subtract: (a, b) => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z }),
+    dot: (a, b) => a.x * b.x + a.y * b.y + a.z * b.z,
+    magnitude: (a) => Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z),
+    scale: (a, s) => ({ x: a.x * s, y: a.y * s, z: a.z * s }),
+    add: (a, b) => ({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z }),
+};
 
 // ---- Helper Functions ----
 export function calculateAngle(a, b, c) {
@@ -30,198 +23,143 @@ export function calculateAngle(a, b, c) {
 
 export function getLandmarkProxy(landmarks) {
     if (!landmarks || landmarks.length === 0) return null;
-
-    // --- FIX: Make this function robust to null landmarks in the array ---
-    const hipL = landmarks[23];
-    const kneeL = landmarks[25];
-    const ankleL = landmarks[27];
-    const hipR = landmarks[24];
-    const kneeR = landmarks[26];
-    const ankleR = landmarks[28];
-
-    if (!hipL || !kneeL || !ankleL || !hipR || !kneeR || !ankleR) {
-        return null;
-    }
-    
+    const hipL = landmarks[23]; const kneeL = landmarks[25]; const ankleL = landmarks[27];
+    const hipR = landmarks[24]; const kneeR = landmarks[26]; const ankleR = landmarks[28];
+    if (!hipL || !kneeL || !ankleL || !hipR || !kneeR || !ankleR) return null;
     return {
         left: { hip: hipL, knee: kneeL, ankle: ankleL },
         right: { hip: hipR, knee: kneeR, ankle: ankleR }
     };
 }
 
-function checkKneeValgus3D(landmarks) {
-    if (!landmarks || landmarks.length === 0) return false;
-    const leftKnee = landmarks[25];
-    const leftAnkle = landmarks[27];
-    const rightKnee = landmarks[26];
-    const rightAnkle = landmarks[28];
-    if(!leftKnee || !leftAnkle || !rightKnee || !rightAnkle) return false;
+// --- NEW: Highly Accurate 3D Valgus Calculation ---
+function calculateValgusState(worldLandmarks) {
+    const proxy = getLandmarkProxy(worldLandmarks);
+    if (!proxy) return { left: 0, right: 0 };
 
-    const VALGUS_THRESHOLD_3D = 0.03;
-    const leftValgus = leftKnee.x > leftAnkle.x + VALGUS_THRESHOLD_3D;
-    const rightValgus = rightKnee.x < rightAnkle.x - VALGUS_THRESHOLD_3D;
-    return leftValgus || rightValgus;
-}
+    // Left Leg
+    const hipAnkleL = vec3.subtract(proxy.left.ankle, proxy.left.hip);
+    const hipKneeL = vec3.subtract(proxy.left.knee, proxy.left.hip);
+    const projL = vec3.dot(hipKneeL, hipAnkleL) / vec3.dot(hipAnkleL, hipAnkleL);
+    const closestPointL = vec3.add(proxy.left.hip, vec3.scale(hipAnkleL, projL));
+    const deviationL = vec3.subtract(proxy.left.knee, closestPointL);
+    const leftDist = vec3.magnitude(deviationL);
+    // Medial deviation for the left knee is in the positive X direction
+    const leftIsMedial = deviationL.x > 0;
 
-function getSmoothedAngle(buffer, newValue) {
-    if (newValue === null) return null;
-    buffer.push(newValue);
-    if (buffer.length > SMOOTHING_WINDOW) {
-        buffer.shift();
-    }
-    return buffer.reduce((sum, val) => sum + val, 0) / buffer.length;
-}
+    // Right Leg
+    const hipAnkleR = vec3.subtract(proxy.right.ankle, proxy.right.hip);
+    const hipKneeR = vec3.subtract(proxy.right.knee, proxy.right.hip);
+    const projR = vec3.dot(hipKneeR, hipAnkleR) / vec3.dot(hipAnkleR, hipAnkleR);
+    const closestPointR = vec3.add(proxy.right.hip, vec3.scale(hipAnkleR, projR));
+    const deviationR = vec3.subtract(proxy.right.knee, closestPointR);
+    const rightDist = vec3.magnitude(deviationR);
+    // Medial deviation for the right knee is in the negative X direction
+    const rightIsMedial = deviationR.x < 0;
 
-// ---- Main pose update function (for LIVE feedback) ----
-export function updatePose(results, frameCounter, filteredLandmarks, filteredWorldLandmarks) {
-    if (!filteredLandmarks || !filteredWorldLandmarks) return;
-
-    const lmProxy = getLandmarkProxy(filteredLandmarks);
-    if (!lmProxy) return;
-
-    const leftVisible = lmProxy.left.hip.visibility > KNEE_VISIBILITY_THRESHOLD;
-    const rightVisible = lmProxy.right.hip.visibility > KNEE_VISIBILITY_THRESHOLD;
-    if (!leftVisible || !rightVisible) return;
-
-    const leftKneeAngle = calculateAngle(lmProxy.left.hip, lmProxy.left.knee, lmProxy.left.ankle);
-    const rightKneeAngle = calculateAngle(lmProxy.right.hip, lmProxy.right.knee, lmProxy.right.ankle);
-
-    const smoothedLeft = getSmoothedAngle(angleBuffer.left, leftKneeAngle);
-    const smoothedRight = getSmoothedAngle(angleBuffer.right, rightKneeAngle);
-    const avgAngle = (smoothedLeft + smoothedRight) / 2;
-
-    kneeValgusState = checkKneeValgus3D(filteredWorldLandmarks);
-    const hipY = (filteredLandmarks[23].y + filteredLandmarks[24].y) / 2;
-
-    switch (repState) {
-        case 'STANDING':
-            if (hipY > (currentRepData?.standingHipY ?? hipY) + 0.05) {
-                repState = 'DESCENDING';
-                currentRepData = {
-                    startFrame: frameCounter,
-                    minDepthAngle: avgAngle,
-                    standingHipY: hipY,
-                    minHipY: hipY,
-                    valgusDetected: false,
-                };
-            }
-            break;
-
-        case 'DESCENDING':
-            if (hipY < currentRepData.minHipY) {
-                currentRepData.minHipY = hipY;
-                currentRepData.minDepthAngle = avgAngle;
-            } else if (hipY > currentRepData.minHipY + 0.03) {
-                repState = 'ASCENDING';
-            }
-            if (kneeValgusState) currentRepData.valgusDetected = true;
-            break;
-
-        case 'ASCENDING':
-            if (hipY <= currentRepData.standingHipY) {
-                repState = 'STANDING';
-                if (currentRepData.minDepthAngle < SQUAT_THRESHOLD) {
-                    repCount++;
-                    repHistory.push({
-                        depth: currentRepData.minDepthAngle,
-                        kneeValgus: currentRepData.valgusDetected,
-                        symmetry: Math.abs(leftKneeAngle - rightKneeAngle)
-                    });
-                    lastRepDepth = currentRepData.minDepthAngle;
-                    lastRepSymmetry = Math.abs(leftKneeAngle - rightKneeAngle);
-                }
-                currentRepData = null;
-            }
-            if (kneeValgusState && currentRepData) currentRepData.valgusDetected = true;
-            break;
-    }
-}
-
-export function getPoseStats() {
     return {
-        repCount,
-        symmetry: lastRepSymmetry,
-        depth: lastRepDepth,
-        repHistory,
-        kneeValgus: kneeValgusState
+        left: leftIsMedial ? leftDist : 0,
+        right: rightIsMedial ? rightDist : 0,
     };
 }
 
-export function resetPoseStats() {
-    repHistory = [];
-    repCount = 0;
-    repState = 'STANDING';
-    currentRepData = null;
-    lastRepQuality = "N/A";
-    lastRepSymmetry = null;
-    lastRepDepth = null;
-    kneeValgusState = false;
-    angleBuffer.left = [];
-    angleBuffer.right = [];
+// --- Simplified function for LIVE feedback ONLY ---
+export function getLivePoseStats(filteredLandmarks, filteredWorldLandmarks) {
+    if (!filteredLandmarks) return { liveDepth: null, liveSymmetry: null, kneeValgus: false };
+
+    const lmProxy = getLandmarkProxy(filteredLandmarks);
+    const valgusState = calculateValgusState(filteredWorldLandmarks);
+    const kneeValgus = (valgusState.left > 0.03 || valgusState.right > 0.03);
+
+    if (!lmProxy) return { liveDepth: null, liveSymmetry: null, kneeValgus };
+
+    const leftKneeAngle = calculateAngle(lmProxy.left.hip, lmProxy.left.knee, lmProxy.left.ankle);
+    const rightKneeAngle = calculateAngle(lmProxy.right.hip, lmProxy.right.knee, lmProxy.right.ankle);
+    let liveDepth = null; let liveSymmetry = null;
+    if (leftKneeAngle && rightKneeAngle) {
+        liveDepth = (leftKneeAngle + rightKneeAngle) / 2;
+        liveSymmetry = Math.abs(leftKneeAngle - rightKneeAngle);
+    }
+    return { liveDepth, liveSymmetry, kneeValgus };
 }
 
 // --- Accurate Post-Session Analysis ---
 export function analyzeSession(allLandmarks, allWorldLandmarks) {
-    if (allLandmarks.length < 20) return [];
+    if (allLandmarks.length < 30) return [];
 
-    const hipYTimeseries = allLandmarks.map(lm => (lm && lm[23] && lm[24]) ? (lm[23].y + lm[24].y) / 2 : null).filter(y => y !== null);
-    if (hipYTimeseries.length < 20) return [];
+    const hipYTimeseries = allLandmarks.map(lm => (lm && lm[23] && lm[24]) ? (lm[23].y + lm[24].y) / 2 : null);
+    
+    const smoothedHipY = [];
+    const smoothingWindow = 5;
+    for(let i = 0; i < hipYTimeseries.length; i++){
+        if(hipYTimeseries[i] === null) { smoothedHipY.push(null); continue; }
+        let sum = 0; let count = 0;
+        for(let j = -smoothingWindow; j <= smoothingWindow; j++){
+            if(i+j >= 0 && i+j < hipYTimeseries.length && hipYTimeseries[i+j] !== null){
+                sum += hipYTimeseries[i+j]; count++;
+            }
+        }
+        smoothedHipY.push(sum/count);
+    }
 
+    const MIN_REP_PROMINENCE = 0.1; const MIN_REP_DISTANCE = 15;
     const troughs = [];
-    for (let i = 5; i < hipYTimeseries.length - 5; i++) {
-        const prev = hipYTimeseries[i-5];
-        const curr = hipYTimeseries[i];
-        const next = hipYTimeseries[i+5];
-        if (curr > prev && curr > next) {
-            troughs.push(i);
+    for (let i = 1; i < smoothedHipY.length - 1; i++) {
+        if (smoothedHipY[i] !== null && smoothedHipY[i-1] !== null && smoothedHipY[i+1] !== null &&
+            smoothedHipY[i] > smoothedHipY[i-1] && smoothedHipY[i] > smoothedHipY[i+1]) {
+             if (troughs.length === 0 || i - troughs[troughs.length - 1] > MIN_REP_DISTANCE) troughs.push(i);
         }
     }
     if (troughs.length === 0) return [];
 
     const finalReps = [];
-    let lastPeak = 0;
     for (const troughIndex of troughs) {
-        if (troughIndex < lastPeak) continue;
+        const proxyAtTrough = getLandmarkProxy(allLandmarks[troughIndex]);
+        if (!proxyAtTrough) continue;
 
-        const lmAtTrough = allLandmarks[troughIndex];
-        const lmProxy = getLandmarkProxy(lmAtTrough);
-        if (!lmProxy) continue;
-        
-        const depthAngle = calculateAngle(lmProxy.left.hip, lmProxy.left.knee, lmProxy.left.ankle);
+        const depthAngle = calculateAngle(proxyAtTrough.left.hip, proxyAtTrough.left.knee, proxyAtTrough.left.ankle);
         if (depthAngle === null || depthAngle > SQUAT_THRESHOLD + 10) continue;
-        
-        let peakIndex = -1;
-        for(let i = troughIndex - 5; i > lastPeak; i--) {
-            if(hipYTimeseries[i] < hipYTimeseries[i+1] && hipYTimeseries[i] < hipYTimeseries[i-1]){
-                peakIndex = i;
-                break;
+
+        let startFrame = 0;
+        for (let i = troughIndex - 1; i > 0; i--) {
+            if (smoothedHipY[i] !== null && smoothedHipY[i-1] !== null && smoothedHipY[i+1] !== null &&
+                smoothedHipY[i] < smoothedHipY[i-1] && smoothedHipY[i] < smoothedHipY[i+1]) {
+                startFrame = i; break;
             }
         }
-        if(peakIndex === -1) peakIndex = lastPeak;
+        
+        let endFrame = allLandmarks.length - 1;
+        for (let i = troughIndex + 1; i < allLandmarks.length - 1; i++) {
+            if (smoothedHipY[i] !== null && smoothedHipY[i-1] !== null && smoothedHipY[i+1] !== null &&
+                smoothedHipY[i] < smoothedHipY[i-1] && smoothedHipY[i] < smoothedHipY[i+1]) {
+                endFrame = i; break;
+            }
+        }
+        
+        if (smoothedHipY[troughIndex] - smoothedHipY[startFrame] < MIN_REP_PROMINENCE) continue;
 
-        const repDepth = hipYTimeseries[troughIndex] - hipYTimeseries[peakIndex];
-        if (repDepth > 0.1) {
-            let hasValgus = false;
-            for (let i = peakIndex; i < troughIndex + (troughIndex - peakIndex) && i < allWorldLandmarks.length; i++) {
-                if (checkKneeValgus3D(allWorldLandmarks[i])) {
-                    hasValgus = true;
-                    break;
+        let maxLeftValgus = 0, maxRightValgus = 0, totalSymmetryDiff = 0, symmetrySamples = 0;
+        for (let i = startFrame; i <= endFrame; i++) {
+            const valgusState = calculateValgusState(allWorldLandmarks[i]);
+            maxLeftValgus = Math.max(maxLeftValgus, valgusState.left);
+            maxRightValgus = Math.max(maxRightValgus, valgusState.right);
+
+            const proxy = getLandmarkProxy(allLandmarks[i]);
+            if(proxy) {
+                const leftAngle = calculateAngle(proxy.left.hip, proxy.left.knee, proxy.left.ankle);
+                const rightAngle = calculateAngle(proxy.right.hip, proxy.right.knee, proxy.right.ankle);
+                if (leftAngle !== null && rightAngle !== null) {
+                    totalSymmetryDiff += Math.abs(leftAngle - rightAngle);
+                    symmetrySamples++;
                 }
             }
-            const symmetryAtDepth = Math.abs(
-                calculateAngle(lmProxy.left.hip, lmProxy.left.knee, lmProxy.left.ankle) -
-                calculateAngle(lmProxy.right.hip, lmProxy.right.knee, lmProxy.right.ankle)
-            );
-
-            finalReps.push({
-                startFrame: peakIndex,
-                endFrame: troughIndex + (troughIndex - peakIndex),
-                depth: depthAngle,
-                kneeValgus: hasValgus,
-                symmetry: symmetryAtDepth,
-            });
-            lastPeak = troughIndex;
         }
+
+        finalReps.push({
+            startFrame, endFrame, depth: depthAngle,
+            maxLeftValgus, maxRightValgus,
+            symmetry: symmetrySamples > 0 ? totalSymmetryDiff / symmetrySamples : 0,
+        });
     }
     return finalReps;
 }

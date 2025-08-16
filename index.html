@@ -18,8 +18,8 @@
 
         <div id="startView">
             <div class="card">
-                <h2>5-Rep Analysis</h2>
-                <p>Get a detailed report on your squat form after completing 5 reps. Your session will be recorded.</p>
+                <h2>Live Analysis</h2>
+                <p>Get a detailed report on your squat form. Your session will be recorded.</p>
                 <button id="startButton">Start Session</button>
             </div>
             
@@ -47,20 +47,20 @@
             </div>
             <div class="stats-grid">
                 <div class="stat-card">
-                    <h3>REPS</h3>
-                    <p><span id="rep-counter">0</span> / 5</p>
+                    <h3>STATUS</h3>
+                    <p id="rep-quality">LIVE</p>
                 </div>
                 <div class="stat-card">
-                    <h3>LAST REP</h3>
-                    <p id="rep-quality">N/A</p>
-                </div>
-                <div class="stat-card">
-                    <h3>DEPTH</h3>
+                    <h3>LIVE DEPTH</h3>
                     <p id="depth">N/A</p>
                 </div>
                 <div class="stat-card">
-                    <h3>SYMMETRY</h3>
+                    <h3>LIVE SYMMETRY</h3>
                     <p id="symmetry">N/A</p>
+                </div>
+                 <div class="stat-card">
+                    <h3>SESSION</h3>
+                    <button id="finishButton" class="button">Finish</button>
                 </div>
             </div>
         </div>
@@ -147,6 +147,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     
+    <script src="filter.js" type="module"></script>
     <script src="chart.js" type="module"></script>
     <script src="pose3d.js" type="module"></script>
     <script src="posedata.js" type="module"></script>

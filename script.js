@@ -1,21 +1,17 @@
 // script.js
 
 import { 
-    updatePose, 
-    getPoseStats, 
-    resetPoseStats,
-    calculateAngle,
+    getLivePoseStats,
     getLandmarkProxy,
-    SQUAT_THRESHOLD,
-    STANDING_THRESHOLD,
-    analyzeSession
+    calculateAngle,
+    analyzeSession,
+    STANDING_THRESHOLD
 } from "./posedata.js";
 import { createLiveScene, createPlaybackScene } from "./pose3d.js";
 import { renderHipHeightChart } from "./chart.js";
 import { LandmarkFilter } from "./filter.js";
 
 // --- Configuration ---
-const SQUAT_TARGET = 5;
 const PLAYBACK_FPS = 30;
 
 // --- DOM Elements ---
@@ -30,6 +26,7 @@ const reportView = document.getElementById('reportView');
 const loadingElement = document.getElementById('loading');
 
 const startButton = document.getElementById('startButton');
+const finishButton = document.getElementById('finishButton');
 const resetButton = document.getElementById('resetButton');
 const downloadButton = document.getElementById('downloadButton');
 const playButton = document.getElementById('playButton');
@@ -47,12 +44,9 @@ let isSessionRunning = false;
 let isProcessingUpload = false;
 let liveScene, playbackScene;
 let playbackAnimationId = null;
-let isStoppingSession = false;
-let sessionStopTimeoutId = null;
 let frameCounter = 0;
 let playbackOffset = 0;
 
-// --- Landmark Filtering ---
 let screenLandmarkFilters = {}; 
 let worldLandmarkFilters = {};
 for (let i = 0; i < 33; i++) {
@@ -88,14 +82,12 @@ const camera = new Camera(videoElement, {
 // --- Main Application Logic ---
 function onResults(results) {
     if (!isSessionRunning || !videoElement.videoWidth) return;
-    
     frameCounter++;
 
     const filteredLandmarks = results.poseLandmarks?.map((lm, i) => lm ? screenLandmarkFilters[i].filter(lm) : null);
     const filteredWorldLandmarks = results.poseWorldLandmarks?.map((lm, i) => lm ? worldLandmarkFilters[i].filter(lm) : null);
     
-    updatePose(results, frameCounter, filteredLandmarks, filteredWorldLandmarks);
-    const stats = getPoseStats();
+    const stats = getLivePoseStats(filteredLandmarks, filteredWorldLandmarks);
 
     drawFrame({ ...results, poseLandmarks: filteredLandmarks }, stats.kneeValgus);
     
@@ -125,15 +117,8 @@ function onResults(results) {
              symmetryData.push(null);
         }
 
-        document.getElementById('rep-counter').innerText = stats.repCount;
-        document.getElementById('rep-quality').innerText = '...';
-        document.getElementById('depth').innerText = stats.depth ? `${stats.depth.toFixed(0)}°` : 'N/A';
-        document.getElementById('symmetry').innerText = stats.symmetry ? `${stats.symmetry.toFixed(0)}°` : 'N/A';
-        
-        if (stats.repCount >= SQUAT_TARGET && !isStoppingSession) {
-            isStoppingSession = true;
-            sessionStopTimeoutId = setTimeout(stopSession, 1000); 
-        }
+        document.getElementById('depth').innerText = stats.liveDepth ? `${stats.liveDepth.toFixed(0)}°` : 'N/A';
+        document.getElementById('symmetry').innerText = stats.liveSymmetry ? `${stats.liveSymmetry.toFixed(0)}°` : 'N/A';
     }
 }
 
@@ -149,22 +134,9 @@ function drawFrame(results, kneeValgus = false) {
     canvasCtx.drawImage(videoElement, 0, 0, outputCanvas.width, outputCanvas.height);
     
     if (results.poseLandmarks) {
-        const legConnections = new Set([[23, 25], [25, 27], [24, 26], [26, 28]].map(c => JSON.stringify(c.sort((a,b) => a-b))));
-        
-        const otherBodyConnections = POSE_CONNECTIONS.filter(conn => {
-            return conn[0] > 10 && conn[1] > 10 && !legConnections.has(JSON.stringify(conn.sort((a,b) => a-b)));
-        });
-        const legConnectionArray = Array.from(legConnections).map(JSON.parse);
-
-        const legColor = kneeValgus ? '#FF4136' : '#DDDDDD';
-
-        drawConnectors(canvasCtx, results.poseLandmarks, otherBodyConnections, { color: '#DDDDDD', lineWidth: 4 });
-        drawConnectors(canvasCtx, results.poseLandmarks, legConnectionArray, { color: legColor, lineWidth: 6 });
-
-        const bodyLandmarks = results.poseLandmarks.slice(11);
-        drawLandmarks(canvasCtx, bodyLandmarks, { color: '#00CFFF', lineWidth: 2 });
+        drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#DDDDDD', lineWidth: 4 });
+        drawLandmarks(canvasCtx, results.poseLandmarks, { color: '#00CFFF', lineWidth: 2 });
     }
-    
     canvasCtx.restore();
 }
 
@@ -174,7 +146,6 @@ async function startSession() {
     if (!canvasCtx) canvasCtx = outputCanvas.getContext('2d');
     
     resetSession();
-    isStoppingSession = false;
     isSessionRunning = true;
     isProcessingUpload = false;
     startView.style.display = 'none';
@@ -210,8 +181,6 @@ function startUploadSession(file) {
     downloadButton.style.display = 'none';
 
     videoElement.style.display = 'block';
-    videoElement.controls = true;
-    videoElement.muted = false;
     videoElement.src = URL.createObjectURL(file);
     videoElement.load();
     videoElement.onloadeddata = () => {
@@ -239,7 +208,6 @@ function stopSession() {
     reportView.style.display = 'block';
     
     generateReport();
-    
     if (!playbackScene) playbackScene = createPlaybackScene(playbackCanvas);
 }
 
@@ -286,7 +254,6 @@ function startPlayback() {
             hipChartInstance.data.datasets[1].data.push(symmetryData[frame]);
             hipChartInstance.update('none'); 
         }
-
         frame++;
         playbackAnimationId = requestAnimationFrame(animate);
     };
@@ -296,24 +263,20 @@ function startPlayback() {
 function resetSession() {
     reportView.style.display = 'none';
     startView.style.display = 'block';
-    
     if (playbackAnimationId) cancelAnimationFrame(playbackAnimationId);
-    if (sessionStopTimeoutId) clearTimeout(sessionStopTimeoutId);
     
-    resetPoseStats();
-    isStoppingSession = false;
+    isSessionRunning = false;
     frameCounter = 0;
     playbackOffset = 0;
     finalRepHistory = [];
-
     recordedWorldLandmarks = [];
     recordedPoseLandmarks = [];
     hipHeightData = [];
     symmetryData = [];
     
     for (let i = 0; i < 33; i++) {
-        screenLandmarkFilters[i] = new LandmarkFilter();
-        worldLandmarkFilters[i] = new LandmarkFilter();
+        screenLandmarkFilters[i].reset();
+        worldLandmarkFilters[i].reset();
     }
 
     if (hipChartInstance) {
@@ -332,8 +295,7 @@ function resetSession() {
     playButton.disabled = false;
     playButton.innerText = "Play 3D Reps";
 
-    document.getElementById('rep-counter').innerText = '0';
-    document.getElementById('rep-quality').innerText = 'N/A';
+    document.getElementById('rep-quality').innerText = 'LIVE';
     document.getElementById('depth').innerText = 'N/A';
     document.getElementById('symmetry').innerText = 'N/A';
 }
@@ -346,56 +308,38 @@ function updateBreakdown(metric, score, weight, value) {
     
     switch (metric) {
         case 'depth':
-            if (score > weight * 0.85) {
-                description = `Excellent depth! Your average angle of ${value.toFixed(0)}° shows great range of motion. Keep it up.`;
-            } else if (score > weight * 0.6) {
-                description = `Good depth. You're reaching an average of ${value.toFixed(0)}°. How to improve: Try to go a little lower to fully engage your muscles.`;
-            } else {
-                description = `Your depth of ${value.toFixed(0)}° is shallow. How to improve: Focus on lowering your hips until they are parallel with your knees.`;
-            }
+            description = score > weight * 0.85 ? `Excellent depth! Your average angle of ${value.toFixed(0)}° shows great range of motion.`
+                        : score > weight * 0.6 ? `Good depth. You're reaching an average of ${value.toFixed(0)}°. Try to go a little lower.`
+                        : `Your depth of ${value.toFixed(0)}° is shallow. Focus on lowering your hips until they are parallel with your knees.`;
             break;
         case 'symmetry':
-            if (score > weight * 0.85) {
-                description = `Great balance, with an average symmetry of ${value.toFixed(0)}%. Your weight seems evenly distributed.`;
-            } else if (score > weight * 0.6) {
-                description = `Good symmetry (${value.toFixed(0)}%). How to improve: There's a slight imbalance. Focus on keeping pressure even across both feet.`;
-            } else {
-                description = `There's a noticeable imbalance (${value.toFixed(0)}%). How to improve: You may be favoring one side. Try to push the ground away evenly with both legs.`;
-            }
+            description = score > weight * 0.85 ? `Great balance, with an average symmetry of ${value.toFixed(0)}%. Your weight seems evenly distributed.`
+                        : score > weight * 0.6 ? `Good symmetry (${value.toFixed(0)}%). There's a slight imbalance. Focus on keeping pressure even across both feet.`
+                        : `There's a noticeable imbalance (${value.toFixed(0)}%). You may be favoring one side. Try to push the ground away evenly with both legs.`;
             break;
         case 'valgus':
-            if (value === 0) {
-                description = `Perfect! Your knees remained stable and did not cave inwards on any rep.`;
-            } else if (value <= 2) {
-                description = `Good stability, but your knees caved in on ${value} rep(s). How to improve: Focus on actively pushing your knees outwards as you stand up.`;
-            } else {
-                description = `Your knees caved in on ${value} reps, increasing injury risk. How to improve: Actively push your knees out, especially when tired. Consider using a resistance band around your knees.`;
-            }
+            description = value === 0 ? `Perfect! Your knees remained stable and did not cave inwards on any rep.`
+                        : value <= 2 ? `Good stability, but your knees caved in on ${value} rep(s). Focus on actively pushing your knees outwards as you stand up.`
+                        : `Your knees caved in on ${value} reps, increasing injury risk. Actively push your knees out, especially when tired.`;
             break;
         case 'consistency':
-             if (score > weight * 0.85) {
-                description = `Excellent consistency, with a depth variation of only ${value.toFixed(1)}°. You maintained solid form across all repetitions.`;
-            } else if (score > weight * 0.6) {
-                description = `Good job. There were some minor variations (${value.toFixed(1)}°) in your form. How to improve: Aim for every rep to look and feel exactly the same.`;
-            } else {
-                description = `Your form was inconsistent (depth varied by ${value.toFixed(1)}°). This can happen when fatigue sets in. How to improve: Focus on controlling the movement, not just completing the reps.`;
-            }
+             description = score > weight * 0.85 ? `Excellent consistency, with a depth variation of only ${value.toFixed(1)}°. You maintained solid form.`
+                         : score > weight * 0.6 ? `Good job. There were some minor variations (${value.toFixed(1)}°) in your form. Aim for every rep to look the same.`
+                         : `Your form was inconsistent (depth varied by ${value.toFixed(1)}°). This can happen with fatigue. Focus on control, not just reps.`;
             break;
     }
     descEl.innerText = description;
 }
 
 function generateReport() {
-    let allDetectedReps = analyzeSession(recordedPoseLandmarks, recordedWorldLandmarks);
-    
-    if (allDetectedReps.length === 0) {
-        console.log("No valid squats were detected in the session.");
+    finalRepHistory = analyzeSession(recordedPoseLandmarks, recordedWorldLandmarks);
+    if (finalRepHistory.length === 0) {
+        alert("No valid squats were detected in the session. Please ensure your full body is visible and try again.");
+        resetSession();
         return;
     }
     
-    // --- NEW: Limit the report and playback to the SQUAT_TARGET ---
-    const repsForReport = allDetectedReps.slice(0, SQUAT_TARGET);
-    finalRepHistory = repsForReport; // Update global history for playback
+    const repsForReport = finalRepHistory;
 
     const firstSquatStartFrame = repsForReport[0].startFrame;
     const lastSquatEndFrame = repsForReport[repsForReport.length - 1].endFrame;
@@ -454,11 +398,10 @@ function generateReport() {
 
 // --- Event Listeners ---
 startButton.addEventListener('click', startSession);
+finishButton.addEventListener('click', stopSession);
 resetButton.addEventListener('click', resetSession);
 playButton.addEventListener('click', startPlayback);
 videoUploadInput.addEventListener('change', (event) => {
     const file = event.target.files[0];
-    if (file) {
-        startUploadSession(file);
-    }
+    if (file) startUploadSession(file);
 });
