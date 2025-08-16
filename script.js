@@ -211,6 +211,7 @@ function startUploadSession(file) {
     videoElement.load();
     videoElement.onloadeddata = () => {
         loadingElement.style.display = 'none';
+        videoElement.play(); 
         processVideoFrames();
     };
 }
