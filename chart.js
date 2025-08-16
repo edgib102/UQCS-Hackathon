@@ -2,7 +2,7 @@
  * Renders a line chart of hip height and symmetry over time.
  * @param {HTMLCanvasElement} canvas The canvas element to draw the chart on.
  * @param {number[]} hipData An array of hip Y-coordinates.
- * @param {number[]} symmetryData An array of symmetry degrees.
+ * @param {number[]} symmetryData An array of symmetry percentages.
  * @returns {Chart} The Chart.js instance.
  */
 export function renderHipHeightChart(canvas, hipData, symmetryData) {
@@ -77,9 +77,11 @@ export function renderHipHeightChart(canvas, hipData, symmetryData) {
         y1: { // Right Y-Axis (Symmetry)
           type: 'linear',
           position: 'right',
+          min: 0,
+          max: 100,
           title: {
             display: true,
-            text: 'Symmetry (deg)',
+            text: 'Symmetry (%)',
             color: '#FF9E00',
             font: { family: "'Roboto Mono', monospace" }
           },

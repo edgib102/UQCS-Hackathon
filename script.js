@@ -12,7 +12,7 @@ import { createLiveScene, createPlaybackScene } from "./pose3d.js";
 import { renderHipHeightChart } from "./chart.js";
 
 // --- Configuration ---
-const SQUAT_TARGET = 1;
+const SQUAT_TARGET = 5;
 const PLAYBACK_FPS = 30;
 
 // --- DOM Elements ---
@@ -37,7 +37,7 @@ let recordedChunks = [];
 let recordedLandmarks = [];
 let recordedPoseLandmarks = [];
 let hipHeightData = [];
-let symmetryData = [];
+let symmetryData = []; // Add this
 let hipChartInstance;
 let isSessionRunning = false;
 let liveScene, playbackScene;
@@ -88,13 +88,14 @@ function onResults(results) {
                 hipHeightData.push(null);
             }
 
-            // Record symmetry in degrees
+            // Record symmetry percentage
             const { left, right } = getLandmarkProxy(results.poseLandmarks);
             if (left.knee.visibility > KNEE_VISIBILITY_THRESHOLD && right.knee.visibility > KNEE_VISIBILITY_THRESHOLD) {
                 const leftKneeAngle = calculateAngle(left.hip, left.knee, left.ankle);
                 const rightKneeAngle = calculateAngle(right.hip, right.knee, right.ankle);
                 const symmetryDiff = Math.abs(leftKneeAngle - rightKneeAngle);
-                symmetryData.push(symmetryDiff);
+                const symmetryPercentage = Math.max(0, 100 - (symmetryDiff / SYMMETRY_THRESHOLD) * 100);
+                symmetryData.push(symmetryPercentage);
             } else {
                 symmetryData.push(null);
             }
@@ -249,7 +250,7 @@ function resetSession() {
     recordedLandmarks = [];
     recordedPoseLandmarks = [];
     hipHeightData = [];
-    symmetryData = [];
+    symmetryData = []; // Reset symmetry data
 
     if (hipChartInstance) {
         hipChartInstance.destroy();
@@ -289,7 +290,7 @@ function generateReport() {
         recordedLandmarks = recordedLandmarks.slice(playbackStartFrame);
         recordedPoseLandmarks = recordedPoseLandmarks.slice(playbackStartFrame);
         hipHeightData = hipHeightData.slice(playbackStartFrame);
-        symmetryData = symmetryData.slice(playbackStartFrame);
+        symmetryData = symmetryData.slice(playbackStartFrame); // Crop symmetry data
     }
 
     // --- CALCULATE STATS & UPDATE UI ---
