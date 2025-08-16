@@ -4,64 +4,73 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Squat Fix</title>
-    <link rel="stylesheet" href="static/style.css">
+    <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
-</head>
-<body>
+</head><body>
     <div class="container">
         <header>
             <h1>Fix Your Squat</h1>
             <p class="subtitle">AI-Powered Form Corrector</p>
         </header>
 
-        <div class="main-content">
-            <div class="video-container" id="video-container">
-                <video id="video" style="display: none;" autoplay playsinline></video>
-                <canvas id="outputCanvas" class="output-canvas"></canvas>
-                <div class="loading" id="loading">
-                    <div class="spinner"></div>
-                    <p>Starting camera...</p>
-                </div>
-            </div>
-            <div class="video-container">
-                <canvas id="pose3dCanvas"></canvas>
+        <div id="startView">
+            <div class="card">
+                <h2>5-Rep Analysis</h2>
+                <p>Get a detailed report on your squat form after completing 5 reps. Your session will be recorded.</p>
+                <button id="startButton">Start Session</button>
             </div>
         </div>
 
-        <div class="stats-grid">
-            <div class="stat-card">
-                <h3>REPS</h3>
-                <p id="rep-counter">0</p>
+        <div id="sessionView" style="display: none;">
+            <div class="main-content">
+                <div class="video-container" id="video-container">
+                    <video id="video" style="display: none;" autoplay playsinline></video>
+                    <canvas id="outputCanvas" class="output-canvas"></canvas>
+                    <div class="loading" id="loading">
+                        <div class="spinner"></div>
+                        <p>Starting camera...</p>
+                    </div>
+                </div>
+                <div class="video-container">
+                    <canvas id="pose3dCanvas"></canvas>
+                </div>
             </div>
-            <div class="stat-card">
-                <h3>QUALITY</h3>
-                <p id="rep-quality">N/A</p>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>REPS</h3>
+                    <p><span id="rep-counter">0</span> / 5</p>
+                </div>
+                <div class="stat-card">
+                    <h3>LAST REP</h3>
+                    <p id="rep-quality">N/A</p>
+                </div>
+                <div class="stat-card">
+                    <h3>DEPTH</h3>
+                    <p id="depth">N/A</p>
+                </div>
+                <div class="stat-card">
+                    <h3>SYMMETRY</h3>
+                    <p id="symmetry">N/A</p>
+                </div>
             </div>
-            <div class="stat-card">
-                <h3>DEPTH</h3>
-                <p id="depth">N/A</p>
-            </div>
-            <div class="stat-card">
-                <h3>ROM</h3>
-                <p id="rom">N/A</p>
-            </div>
-            <div class="stat-card">
-                <h3>SYMMETRY</h3>
-                <p id="symmetry">N/A</p>
-            </div>
-            <div class="stat-card">
-                <h3>KNEE VALGUS</h3>
-                <p id="valgus">N/A</p>
-            </div>
-            <div class="stat-card">
-                <h3>ECCENTRIC</h3>
-                <p id="ecc-time">0.0s</p>
-            </div>
-            <div class="stat-card">
-                <h3>CONCENTRIC</h3>
-                <p id="con-time">0.0s</p>
+        </div>
+
+        <div id="reportView" style="display: none;">
+            <div class="card">
+                <h2>Session Report</h2>
+                <div class="report-grid">
+                    <div><strong>Overall Quality:</strong> <span id="report-quality-overall"></span></div>
+                    <div><strong>Average Depth:</strong> <span id="report-depth-avg"></span></div>
+                    <div><strong>Average Symmetry:</strong> <span id="report-symmetry-avg"></span></div>
+                    <div><strong>Knee Valgus Warnings:</strong> <span id="report-valgus-count"></span></div>
+                </div>
+                <p>Your form analysis is complete. Download the recording or try again.</p>
+                <div class="button-group">
+                    <a id="downloadButton" class="button" download="squat_session.webm">Download Video</a>
+                    <button id="resetButton">Go Again</button>
+                </div>
             </div>
         </div>
     </div>
@@ -70,7 +79,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     
-    <script src="/static/script.js" type="module"></script>
-    
+    <script src="script.js" type="module"></script>
 </body>
 </html>
