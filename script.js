@@ -5,14 +5,15 @@ import {
     calculateAngle,
     getLandmarkProxy,
     SQUAT_THRESHOLD,
-    KNEE_VISIBILITY_THRESHOLD
+    KNEE_VISIBILITY_THRESHOLD,
+    SYMMETRY_THRESHOLD
 } from "./posedata.js";
 import { createLiveScene, createPlaybackScene } from "./pose3d.js";
 import { renderHipHeightChart } from "./chart.js";
 
 // --- Configuration ---
 const SQUAT_TARGET = 5;
-const PLAYBACK_FPS = 30; // For calculating the 1-second offset
+const PLAYBACK_FPS = 30;
 
 // --- DOM Elements ---
 const videoElement = document.getElementById('video');
@@ -37,11 +38,12 @@ let recordedChunks = [];
 let recordedLandmarks = [];
 let recordedPoseLandmarks = [];
 let hipHeightData = [];
+let symmetryData = []; // Add this
 let hipChartInstance;
 let isSessionRunning = false;
 let isProcessingUpload = false; // New Line
 let liveScene, playbackScene;
-let playbackAnimationId = null;
+let playbackAnimationId = null; // To control the animation loop
 
 // --- MediaPipe Pose ---
 const pose = new Pose({
@@ -73,54 +75,61 @@ function onResults(results) {
     if (loadingElement.style.display !== 'none') {
         loadingElement.style.display = 'none';
         videoElement.style.display = 'block';
-        if (isProcessingUpload) {
-            videoElement.play();
-        }
     }
     
     // --- 2. Draw the Video Frame and Skeleton ---
     drawFrame(results);
     
-    // --- 3. Process Pose Data (if available) ---
     if (results.poseLandmarks) {
-        // We only record a frame if we have the 3D data for playback.
         if (results.poseWorldLandmarks) {
-            // Update the live 3D scene
             liveScene.update(results.poseWorldLandmarks);
-            
-            // Record data needed for playback and analysis
             recordedLandmarks.push(JSON.parse(JSON.stringify(results.poseWorldLandmarks)));
             recordedPoseLandmarks.push(JSON.parse(JSON.stringify(results.poseLandmarks)));
 
-            // Now, determine the corresponding hip height for this exact recorded frame.
+            // Record hip height
             const leftHip = results.poseLandmarks[23];
             const rightHip = results.poseLandmarks[24];
             if (leftHip.visibility > 0.5 && rightHip.visibility > 0.5) {
-                const avgHipY = (leftHip.y + rightHip.y) / 2;
-                hipHeightData.push(avgHipY);
+                hipHeightData.push((leftHip.y + rightHip.y) / 2);
             } else {
                 hipHeightData.push(null);
             }
+
+            // Record symmetry percentage
+            const { left, right } = getLandmarkProxy(results.poseLandmarks);
+            if (left.knee.visibility > KNEE_VISIBILITY_THRESHOLD && right.knee.visibility > KNEE_VISIBILITY_THRESHOLD) {
+                const leftKneeAngle = calculateAngle(left.hip, left.knee, left.ankle);
+                const rightKneeAngle = calculateAngle(right.hip, right.knee, right.ankle);
+                const symmetryDiff = Math.abs(leftKneeAngle - rightKneeAngle);
+                const symmetryPercentage = Math.max(0, 100 - (symmetryDiff / SYMMETRY_THRESHOLD) * 100);
+                symmetryData.push(symmetryPercentage);
+            } else {
+                symmetryData.push(null);
+            }
         }
 
-        // --- 4. Run Analysis & Update Stats ---
         updatePose(results);
         const stats = getPoseStats();
 
-        // Update the live stats display
         document.getElementById('rep-counter').innerText = stats.repCount;
         document.getElementById('rep-quality').innerText = stats.repQuality;
         document.getElementById('depth').innerText = stats.depth ? `${stats.depth.toFixed(0)}°` : 'N/A';
         document.getElementById('symmetry').innerText = stats.symmetry ? `${stats.symmetry.toFixed(0)}°` : 'N/A';
         
-        // Check if the session is complete
-        if (stats.repCount >= SQUAT_TARGET) {
-            stopSession();
+        if (stats.repCount >= SQUAT_TARGET && !isStoppingSession) {
+            isStoppingSession = true;
+            sessionStopTimeoutId = setTimeout(() => {
+                stopSession();
+            }, 1000); 
         }
     }
 }
 
 function drawFrame(results) {
+    if (loadingElement.style.display !== 'none') {
+        loadingElement.style.display = 'none';
+        videoElement.style.display = 'block';
+    }
     outputCanvas.width = videoElement.videoWidth;
     outputCanvas.height = videoElement.videoHeight;
     canvasCtx.save();
@@ -128,15 +137,9 @@ function drawFrame(results) {
     canvasCtx.drawImage(videoElement, 0, 0, outputCanvas.width, outputCanvas.height);
     
     if (results.poseLandmarks) {
-        // Filter out facial landmarks (0-10) and their connections
         const bodyLandmarks = results.poseLandmarks.slice(11);
-        const bodyConnections = POSE_CONNECTIONS.filter(
-            ([start, end]) => start > 10 && end > 10
-        );
-
-        // Draw body connectors
+        const bodyConnections = POSE_CONNECTIONS.filter(([start, end]) => start > 10 && end > 10);
         drawConnectors(canvasCtx, results.poseLandmarks, bodyConnections, { color: '#DDDDDD', lineWidth: 4 });
-        // Draw body landmarks
         drawLandmarks(canvasCtx, bodyLandmarks, { color: '#00CFFF', lineWidth: 2 });
     }
     
@@ -145,7 +148,6 @@ function drawFrame(results) {
 
 // --- Session & Playback Control ---
 async function startSession() {
-    // Initialize scenes and contexts now that the page is loaded
     if (!liveScene) {
         liveScene = createLiveScene(document.getElementById('pose3dCanvas'));
     }
@@ -153,6 +155,7 @@ async function startSession() {
         canvasCtx = outputCanvas.getContext('2d');
     }
     
+    isStoppingSession = false;
     isSessionRunning = true;
     isProcessingUpload = false; // New Line
     startView.style.display = 'none';
@@ -231,7 +234,6 @@ function stopSession() {
     
     generateReport();
     
-    // Initialize the playback scene once the report is shown
     if (!playbackScene) {
         playbackScene = createPlaybackScene(playbackCanvas);
     }
@@ -246,15 +248,14 @@ function startPlayback() {
     playButton.disabled = true;
     playButton.innerText = "Playing...";
 
-    // Clear the chart's data for a clean start
     if (hipChartInstance) {
         hipChartInstance.data.labels = [];
         hipChartInstance.data.datasets[0].data = [];
+        hipChartInstance.data.datasets[1].data = []; // Clear symmetry data
         hipChartInstance.update('none');
     }
 
     const animate = () => {
-        // If the user navigates away, stop the animation.
         if (reportView.style.display === 'none') {
             playButton.disabled = false;
             playButton.innerText = "Play 3D Reps";
@@ -264,17 +265,15 @@ function startPlayback() {
         if (frame >= recordedLandmarks.length) {
             playButton.disabled = false;
             playButton.innerText = "Replay";
-            return; // End animation
+            return;
         }
 
-        // 1. Update the 3D skeleton
         playbackScene.update(recordedLandmarks[frame]);
         
-        // 2. Add data to the chart to "draw" the line
-        if (hipChartInstance && frame < hipHeightData.length) {
+        if (hipChartInstance) {
             hipChartInstance.data.labels.push(frame);
             hipChartInstance.data.datasets[0].data.push(hipHeightData[frame]);
-            // Redraw the chart with the new point, without animating the chart itself
+            hipChartInstance.data.datasets[1].data.push(symmetryData[frame]); // Add symmetry data
             hipChartInstance.update('none'); 
         }
 
@@ -287,7 +286,6 @@ function startPlayback() {
 
 
 function resetSession() {
-    // Hide the report and show the start screen
     reportView.style.display = 'none';
     startView.style.display = 'block';
     
@@ -296,24 +294,27 @@ function resetSession() {
         playbackAnimationId = null;
     }
     
+    if (sessionStopTimeoutId) {
+        clearTimeout(sessionStopTimeoutId);
+        sessionStopTimeoutId = null;
+    }
+    isStoppingSession = false;
+    
     resetPoseStats();
 
-    // Clear recorded data for the next session
     recordedLandmarks = [];
     recordedPoseLandmarks = [];
     hipHeightData = [];
+    symmetryData = []; // Reset symmetry data
 
-    // Destroy the old chart instance to prevent memory leaks
     if (hipChartInstance) {
         hipChartInstance.destroy();
         hipChartInstance = null;
     }
     
-    // Re-enable the playback button for the next report
     playButton.disabled = false;
     playButton.innerText = "Play 3D Reps";
 
-    // Reset UI text
     document.getElementById('rep-counter').innerText = '0';
     document.getElementById('rep-quality').innerText = 'N/A';
     document.getElementById('depth').innerText = 'N/A';
@@ -324,61 +325,56 @@ function generateReport() {
     const { repHistory } = getPoseStats();
     if (repHistory.length === 0) return;
 
-    // --- 💡 ADD THIS BLOCK: CROP PLAYBACK ---
+    // --- CROP PLAYBACK ---
     let firstSquatStartFrame = 0;
     for (let i = 0; i < recordedPoseLandmarks.length; i++) {
         const landmarks = recordedPoseLandmarks[i];
         if (!landmarks) continue;
-        
         const { left, right } = getLandmarkProxy(landmarks);
-        
         if (left.knee.visibility > KNEE_VISIBILITY_THRESHOLD && right.knee.visibility > KNEE_VISIBILITY_THRESHOLD) {
             const leftKneeAngle = calculateAngle(left.hip, left.knee, left.ankle);
             const rightKneeAngle = calculateAngle(right.hip, right.knee, right.ankle);
-            
             if (leftKneeAngle < SQUAT_THRESHOLD && rightKneeAngle < SQUAT_THRESHOLD) {
                 firstSquatStartFrame = i;
-                break; // Found the first frame, exit loop
+                break;
             }
         }
     }
-
-    // Calculate the new starting point (1 second before the squat)
     const playbackStartFrame = Math.max(0, firstSquatStartFrame - PLAYBACK_FPS);
-
-    // If we have a new start time, slice all the data arrays
     if (playbackStartFrame > 0) {
         recordedLandmarks = recordedLandmarks.slice(playbackStartFrame);
         recordedPoseLandmarks = recordedPoseLandmarks.slice(playbackStartFrame);
         hipHeightData = hipHeightData.slice(playbackStartFrame);
+        symmetryData = symmetryData.slice(playbackStartFrame); // Crop symmetry data
     }
-    // --- END BLOCK ---
 
-
+    // --- CALCULATE STATS & UPDATE UI ---
     const avgDepth = repHistory.reduce((s, r) => s + r.depth, 0) / repHistory.length;
     const avgSymmetry = repHistory.reduce((s, r) => s + (r.symmetry || 0), 0) / repHistory.length;
     const valgusCount = repHistory.filter(r => r.kneeValgus).length;
     const qualityScores = { "GOOD": 3, "OK": 2, "BAD": 1 };
     const avgQuality = repHistory.reduce((s, r) => s + qualityScores[r.quality], 0) / repHistory.length;
     const overallQuality = avgQuality > 2.5 ? "Excellent" : avgQuality > 1.5 ? "Good" : "Needs Work";
-
     document.getElementById('report-quality-overall').innerText = overallQuality;
     document.getElementById('report-depth-avg').innerText = `${avgDepth.toFixed(0)}°`;
     document.getElementById('report-symmetry-avg').innerText = `${avgSymmetry.toFixed(0)}°`;
     document.getElementById('report-valgus-count').innerText = `${valgusCount} of ${SQUAT_TARGET} reps`;
     
-    // Clean up the (now cropped) data for better visualization
+    // --- CLEAN UP GRAPH VISUAL ---
     const firstValidHipHeight = hipHeightData.find(h => h !== null);
     if (firstValidHipHeight !== undefined) {
         const firstValidIndex = hipHeightData.indexOf(firstValidHipHeight);
-        for (let i = 0; i < firstValidIndex; i++) {
-            hipHeightData[i] = firstValidHipHeight;
-        }
+        for (let i = 0; i < firstValidIndex; i++) hipHeightData[i] = firstValidHipHeight;
+    }
+    const firstValidSymmetry = symmetryData.find(s => s !== null);
+    if (firstValidSymmetry !== undefined) {
+        const firstValidIndex = symmetryData.indexOf(firstValidSymmetry);
+        for (let i = 0; i < firstValidIndex; i++) symmetryData[i] = firstValidSymmetry;
     }
 
-    // Render the Hip Height Chart with an empty dataset to start
+    // Render the chart with empty datasets
     const hipHeightChartCanvas = document.getElementById('hipHeightChart');
-    hipChartInstance = renderHipHeightChart(hipHeightChartCanvas, []);
+    hipChartInstance = renderHipHeightChart(hipHeightChartCanvas, [], []);
 }
 
 // --- Event Listeners ---

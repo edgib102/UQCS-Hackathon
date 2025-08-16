@@ -15,10 +15,10 @@ let repStartTime = null;
 
 // ---- Thresholds ----
 const STANDING_THRESHOLD = 160;
-export const SQUAT_THRESHOLD = 110; // Export this
-export const KNEE_VISIBILITY_THRESHOLD = 0.65; // Export this
-const SYMMETRY_THRESHOLD = 20;
-const VALGUS_THRESHOLD = 0.02; // New threshold for knee valgus margin
+export const SQUAT_THRESHOLD = 110;
+export const KNEE_VISIBILITY_THRESHOLD = 0.65;
+export const SYMMETRY_THRESHOLD = 20; // Export this
+const VALGUS_THRESHOLD = 0.02;
 
 // ---- Main pose update function ----
 export function updatePose(results) {
@@ -99,21 +99,17 @@ export function resetPoseStats() {
 // ---- Helper Functions ----
 function checkKneeValgus(left, right, leftVisible, rightVisible) {
     if (!leftVisible || !rightVisible) return false;
-    // Check if left knee is inside the ankle, plus a margin
     const leftValgus = left.knee.x < left.ankle.x - VALGUS_THRESHOLD;
-    // Check if right knee is inside the ankle, plus a margin
     const rightValgus = right.knee.x > right.ankle.x + VALGUS_THRESHOLD;
     return leftValgus || rightValgus;
 }
 
-// Export for use in cropping logic
 export function calculateAngle(a, b, c) {
     const rad = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
     let deg = Math.abs(rad * (180.0 / Math.PI));
     return deg > 180 ? 360 - deg : deg;
 }
 
-// Export for use in cropping logic
 export function getLandmarkProxy(landmarks) {
     return {
         left: { hip: landmarks[23], knee: landmarks[25], ankle: landmarks[27] },
