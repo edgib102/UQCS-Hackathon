@@ -1,6 +1,9 @@
 // pose3d.js
 
-import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.module.js";
+// Use the mapped imports, which are now resolved by the import map
+import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+
 
 // --- Configuration for the Skeleton ---
 const CONNECTIONS = [
@@ -29,6 +32,7 @@ class PoseScene {
         this.options = { autoRotate: false, ...options };
         this.jointSpheres = [];
         this.boneLines = [];
+        this.controls = null; // Property to hold OrbitControls instance
         this._init();
     }
 
@@ -40,6 +44,12 @@ class PoseScene {
         this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
         this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
         
+        // Add OrbitControls
+        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+        this.controls.enableDamping = true; // Makes the controls feel smoother
+        this.controls.dampingFactor = 0.05;
+        this.controls.target.set(0, 1, 0); // Initial focus point
+
         this.scene.add(new THREE.DirectionalLight(0xffffff, 0.8));
         this.scene.add(new THREE.AmbientLight(0x404040, 2));
         this.scene.add(new THREE.GridHelper(5, 10, 0x888888, 0x444444));
@@ -51,9 +61,8 @@ class PoseScene {
 
         const animate = () => {
             requestAnimationFrame(animate);
-            if (this.options.autoRotate) {
-                this.skeletonGroup.rotation.y += 0.005;
-            }
+            // Update controls in the animation loop
+            this.controls.update(); 
             this.renderer.render(this.scene, this.camera);
         };
         animate();
@@ -98,7 +107,6 @@ class PoseScene {
 
         landmarks.forEach((lm, i) => {
             const joint = this.jointSpheres[i];
-            // --- FIX: Safely handle null landmarks ---
             if (lm) {
                 joint.position.set(-lm.x, -lm.y, -lm.z);
                 joint.visible = lm.visibility > 0.5;
@@ -114,7 +122,6 @@ class PoseScene {
             const start = landmarks[conn[0]];
             const end = landmarks[conn[1]];
             const line = this.boneLines[idx];
-            // --- FIX: Safely handle null start/end landmarks for connections ---
             if (start && end && start.visibility > 0.5 && end.visibility > 0.5) {
                 line.geometry.setFromPoints([this.jointSpheres[conn[0]].position, this.jointSpheres[conn[1]].position]);
                 line.visible = true;
@@ -132,7 +139,8 @@ class PoseScene {
         if (leftHip.visible && rightHip.visible) {
             const hipCenter = new THREE.Vector3().addVectors(leftHip.position, rightHip.position).multiplyScalar(0.5);
             hipCenter.y += this.skeletonGroup.position.y;
-            this.camera.lookAt(hipCenter);
+            // Update the controls' target instead of using camera.lookAt
+            this.controls.target.copy(hipCenter);
         }
     }
     
@@ -159,7 +167,8 @@ class PoseScene {
 }
 
 export function createLiveScene(canvas) {
-    return new PoseScene(canvas, { autoRotate: true });
+    // Note: The 'autoRotate' option is no longer used by our custom logic
+    return new PoseScene(canvas, { autoRotate: false });
 }
 
 export function createPlaybackScene(canvas) {

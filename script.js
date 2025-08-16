@@ -1,6 +1,6 @@
-// script.js
+// script.js - Improved scoring for webcam accuracy
 
-import { 
+import {
     getLivePoseStats,
     getLandmarkProxy,
     calculateAngle,
@@ -13,8 +13,8 @@ import { LandmarkFilter } from "./filter.js";
 
 // --- Configuration ---
 const PLAYBACK_FPS = 30;
-const SCORE_WEIGHTS = { depth: 15, symmetry: 30, valgus: 30, consistency: 25 };
-
+// IMPROVED: More balanced scoring weights that add up to 100
+const SCORE_WEIGHTS = { depth: 30, symmetry: 25, valgus: 20, consistency: 25 };
 
 // --- DOM Elements ---
 const videoElement = document.getElementById('video');
@@ -49,11 +49,12 @@ let playbackAnimationId = null;
 let frameCounter = 0;
 let playbackOffset = 0;
 
-let screenLandmarkFilters = {}; 
+// IMPROVED: More aggressive filtering for webcam noise
+let screenLandmarkFilters = {};
 let worldLandmarkFilters = {};
 for (let i = 0; i < 33; i++) {
-    screenLandmarkFilters[i] = new LandmarkFilter();
-    worldLandmarkFilters[i] = new LandmarkFilter();
+    screenLandmarkFilters[i] = new LandmarkFilter(0.8, 0.3); // More smoothing
+    worldLandmarkFilters[i] = new LandmarkFilter(0.8, 0.3);
 }
 let finalRepHistory = [];
 
@@ -63,7 +64,7 @@ const pose = new Pose({
 });
 
 pose.setOptions({
-    modelComplexity: 2, 
+    modelComplexity: 2,
     smoothLandmarks: true,
     minDetectionConfidence: 0.75,
     minTrackingConfidence: 0.8
@@ -88,14 +89,14 @@ function onResults(results) {
 
     const filteredLandmarks = results.poseLandmarks?.map((lm, i) => lm ? screenLandmarkFilters[i].filter(lm) : null);
     const filteredWorldLandmarks = results.poseWorldLandmarks?.map((lm, i) => lm ? worldLandmarkFilters[i].filter(lm) : null);
-    
+
     const stats = getLivePoseStats(filteredLandmarks, filteredWorldLandmarks);
 
     drawFrame({ ...results, poseLandmarks: filteredLandmarks }, stats.kneeValgus);
-    
+
     if (filteredLandmarks && filteredWorldLandmarks) {
         liveScene.update(filteredWorldLandmarks);
-        
+
         recordedWorldLandmarks.push(JSON.parse(JSON.stringify(filteredWorldLandmarks)));
         recordedPoseLandmarks.push(JSON.parse(JSON.stringify(filteredLandmarks)));
 
@@ -106,11 +107,11 @@ function onResults(results) {
         } else {
             hipHeightData.push(null);
         }
-        
+
         const { left, right } = getLandmarkProxy(filteredLandmarks);
         const leftKneeAngle = calculateAngle(left?.hip, left?.knee, left?.ankle);
         const rightKneeAngle = calculateAngle(right?.hip, right?.knee, right?.ankle);
-        
+
         if(leftKneeAngle !== null && rightKneeAngle !== null){
             const symmetryDiff = Math.abs(leftKneeAngle - rightKneeAngle);
             const symmetryPercentage = 100 * Math.exp(-0.07 * symmetryDiff);
@@ -134,7 +135,7 @@ function drawFrame(results, kneeValgus = false) {
     canvasCtx.save();
     canvasCtx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
     canvasCtx.drawImage(videoElement, 0, 0, outputCanvas.width, outputCanvas.height);
-    
+
     if (results.poseLandmarks) {
         drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#DDDDDD', lineWidth: 4 });
         drawLandmarks(canvasCtx, results.poseLandmarks, { color: '#00CFFF', lineWidth: 2 });
@@ -146,7 +147,7 @@ function drawFrame(results, kneeValgus = false) {
 async function startSession() {
     if (!liveScene) liveScene = createLiveScene(document.getElementById('pose3dCanvas'));
     if (!canvasCtx) canvasCtx = outputCanvas.getContext('2d');
-    
+
     resetSession();
     isSessionRunning = true;
     isProcessingUpload = false;
@@ -157,7 +158,7 @@ async function startSession() {
     downloadButton.style.display = 'inline-block';
 
     await camera.start();
-    
+
     const stream = outputCanvas.captureStream(PLAYBACK_FPS);
     mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
     mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
@@ -204,11 +205,11 @@ function stopSession() {
     isSessionRunning = false;
     if (!isProcessingUpload && mediaRecorder?.state === 'recording') mediaRecorder.stop();
     if (!isProcessingUpload) camera.stop();
-    
+
     videoElement.style.display = 'none';
     sessionView.style.display = 'none';
     reportView.style.display = 'block';
-    
+
     generateReport();
     if (!playbackScene) playbackScene = createPlaybackScene(playbackCanvas);
 }
@@ -245,10 +246,11 @@ function startPlayback() {
 
         const originalFrame = frame + playbackOffset;
         const currentRep = repFrameMap.get(originalFrame);
-        
-        const VALGUS_VISUAL_THRESHOLD = 0.03; // 3cm
+
+        // IMPROVED: More conservative threshold for visual feedback
+        const VALGUS_VISUAL_THRESHOLD = 0.08;
         const hasKneeValgus = currentRep ? (currentRep.maxLeftValgus > VALGUS_VISUAL_THRESHOLD || currentRep.maxRightValgus > VALGUS_VISUAL_THRESHOLD) : false;
-        
+
         playbackScene.update(recordedWorldLandmarks[frame]);
         playbackScene.updateColors(hasKneeValgus);
 
@@ -256,7 +258,7 @@ function startPlayback() {
             hipChartInstance.data.labels.push(originalFrame);
             hipChartInstance.data.datasets[0].data.push(hipHeightData[frame]);
             hipChartInstance.data.datasets[1].data.push(symmetryData[frame]);
-            hipChartInstance.update('none'); 
+            hipChartInstance.update('none');
         }
         frame++;
         playbackAnimationId = requestAnimationFrame(animate);
@@ -268,7 +270,7 @@ function resetSession() {
     reportView.style.display = 'none';
     startView.style.display = 'block';
     if (playbackAnimationId) cancelAnimationFrame(playbackAnimationId);
-    
+
     isSessionRunning = false;
     frameCounter = 0;
     playbackOffset = 0;
@@ -277,7 +279,7 @@ function resetSession() {
     recordedPoseLandmarks = [];
     hipHeightData = [];
     symmetryData = [];
-    
+
     for (let i = 0; i < 33; i++) {
         screenLandmarkFilters[i].reset();
         worldLandmarkFilters[i].reset();
@@ -287,7 +289,7 @@ function resetSession() {
         hipChartInstance.destroy();
         hipChartInstance = null;
     }
-    
+
     const scoreCircle = document.querySelector('.score-circle');
     if (scoreCircle) scoreCircle.style.setProperty('--p', 0);
     document.getElementById('report-score-value').innerText = '0';
@@ -351,15 +353,15 @@ function updateBreakdown(metric, score, weight, values) {
                 description = `Your knees caved inwards on ${count} of ${totalReps} reps. This is a common issue called "knee valgus" and increases injury risk. Strengthen your glutes and focus on pushing your knees out.`;
             }
             break;
-            
+
         case 'consistency':
             const { stdDev } = values;
             if (performanceTier > 0.9) {
                 description = `Incredibly consistent! Your depth varied by only ${stdDev.toFixed(1)}°. Every rep was a mirror of the last. This is professional-level form.`;
             } else if (performanceTier > 0.65) {
-                description = `Good consistency. A small variation of ${stdDev.toFixed(1)}° was detected. Aim for each rep to feel and look identical for maximum efficiency and safety.`;
+                description = `Good consistency. A variation of ${stdDev.toFixed(1)}° was detected. This is normal for most lifters. Focus on maintaining the same tempo and depth cues.`;
             } else {
-                description = `Your form was inconsistent, with depth varying by ${stdDev.toFixed(1)}°. This often means you're losing focus or control under fatigue. Prioritize quality over quantity on every single rep.`;
+                description = `Your form varied by ${stdDev.toFixed(1)}°. This suggests some inconsistency in your movement pattern. Try focusing on a consistent tempo and depth marker.`;
             }
             break;
     }
@@ -367,7 +369,7 @@ function updateBreakdown(metric, score, weight, values) {
 }
 
 /**
- * Analyzes the completed session, calculates scores, and populates the report view.
+ * IMPROVED: More realistic scoring for webcam-based analysis
  */
 function generateReport() {
     finalRepHistory = analyzeSession(recordedPoseLandmarks, recordedWorldLandmarks);
@@ -376,7 +378,7 @@ function generateReport() {
         resetSession();
         return;
     }
-    
+
     // Crop the data arrays to focus only on the detected squats for playback
     const firstSquatStartFrame = finalRepHistory[0].startFrame;
     const lastSquatEndFrame = finalRepHistory[finalRepHistory.length - 1].endFrame;
@@ -388,88 +390,106 @@ function generateReport() {
     recordedPoseLandmarks = recordedPoseLandmarks.slice(cropStartFrame, cropEndFrame);
     hipHeightData = hipHeightData.slice(cropStartFrame, cropEndFrame);
     symmetryData = symmetryData.slice(cropStartFrame, cropEndFrame);
-    
-    // --- 1. DEPTH SCORING (Optimized with non-linear curve and ATG bonus) ---
-    const SQUAT_IDEAL_DEPTH = 90; // Parallel is the goal for a full score
-    const SQUAT_ATG_DEPTH = 75;   // "Ass-to-grass" depth for bonus points
+
+    // IMPROVED: More webcam-friendly depth scoring
+    const SQUAT_IDEAL_DEPTH = 90;
+    const SQUAT_ATG_DEPTH = 75;
     const avgDepthAngle = finalRepHistory.reduce((sum, rep) => sum + rep.depth, 0) / finalRepHistory.length;
 
     const getDepthProgress = (angle) => {
         if (angle >= STANDING_THRESHOLD) return 0;
         if (angle <= SQUAT_IDEAL_DEPTH) return 1.0;
         const progress = (STANDING_THRESHOLD - angle) / (STANDING_THRESHOLD - SQUAT_IDEAL_DEPTH);
-        // Apply an easing function (sine curve) to make progress feel more rewarding
-        return Math.sin(progress * Math.PI / 2);
+        // Gentler curve for more encouraging feedback
+        return Math.sqrt(progress);
     };
 
     const baseProgress = getDepthProgress(avgDepthAngle);
-    const atgBonus = avgDepthAngle < SQUAT_IDEAL_DEPTH 
-        ? ((SQUAT_IDEAL_DEPTH - Math.max(SQUAT_ATG_DEPTH, avgDepthAngle)) / (SQUAT_IDEAL_DEPTH - SQUAT_ATG_DEPTH)) * 0.15 // Bonus up to 15%
+    const atgBonus = avgDepthAngle < SQUAT_IDEAL_DEPTH
+        ? ((SQUAT_IDEAL_DEPTH - Math.max(SQUAT_ATG_DEPTH, avgDepthAngle)) / (SQUAT_IDEAL_DEPTH - SQUAT_ATG_DEPTH)) * 0.1
         : 0;
-    // FIX: Use SCORE_WEIGHTS instead of weights
     const depthScore = Math.min(1.0, baseProgress + atgBonus) * SCORE_WEIGHTS.depth;
 
-
-    // --- 2. SYMMETRY SCORING (Original exponential model is effective) ---
+    // IMPROVED: More forgiving symmetry scoring
     const avgSymmetryDiff = finalRepHistory.reduce((s, r) => s + r.symmetry, 0) / finalRepHistory.length;
-    const avgSymmetryPercent = 100 * Math.exp(-0.07 * avgSymmetryDiff);
-    // FIX: Use SCORE_WEIGHTS instead of weights
+    const avgSymmetryPercent = 100 * Math.exp(-0.05 * avgSymmetryDiff); // More forgiving exponential
     const symmetryScore = (avgSymmetryPercent / 100) * SCORE_WEIGHTS.symmetry;
 
-
-    // --- 3. VALGUS SCORING (Optimized to penalize per-rep events and severity) ---
-    const VALGUS_THRESHOLD_METERS = 0.03; // 3cm deviation is a flag
-    const SEVERE_VALGUS_METERS = 0.06;    // 6cm is a major issue
-    // FIX: Use SCORE_WEIGHTS instead of weights
+    // IMPROVED: More realistic valgus scoring for webcam
+    const VALGUS_THRESHOLD = 0.12; // More conservative threshold for 2D analysis
+    const SEVERE_VALGUS = 0.25;    // Higher threshold for severe cases
     let valgusScore = SCORE_WEIGHTS.valgus;
     let valgusCount = 0;
 
     finalRepHistory.forEach(rep => {
         const maxValgus = Math.max(rep.maxLeftValgus, rep.maxRightValgus);
-        if (maxValgus > VALGUS_THRESHOLD_METERS) {
+        if (maxValgus > VALGUS_THRESHOLD) {
             valgusCount++;
-            // Base penalty scales with set length to be fair
-            // FIX: Use SCORE_WEIGHTS instead of weights
-            let penalty = SCORE_WEIGHTS.valgus / Math.max(5, finalRepHistory.length);
-            // Add a severity multiplier for significant knee cave
-            if (maxValgus > SEVERE_VALGUS_METERS) {
-                penalty *= 1.5;
+            // More graduated penalty system
+            let penalty = SCORE_WEIGHTS.valgus / Math.max(8, finalRepHistory.length); // Base penalty
+
+            if (maxValgus > SEVERE_VALGUS) {
+                penalty *= 2.0; // Double penalty for severe cases
+            } else if (maxValgus > VALGUS_THRESHOLD * 1.5) {
+                penalty *= 1.5; // 50% extra for moderate cases
             }
+
             valgusScore -= penalty;
         }
     });
     valgusScore = Math.max(0, valgusScore);
 
-
-    // --- 4. CONSISTENCY SCORING (Optimized with stricter threshold and power curve) ---
+    // IMPROVED: More realistic consistency scoring
     const depths = finalRepHistory.map(r => r.depth);
-    const stdDev = depths.length > 1 ? Math.sqrt(depths.map(x => Math.pow(x - avgDepthAngle, 2)).reduce((a, b) => a + b) / (depths.length - 1)) : 0;
-    const MAX_ACCEPTABLE_STD_DEV = 8; 
-    // Use a power curve to penalize larger deviations more heavily
-    const consistencyProgress = Math.max(0, 1 - Math.pow(stdDev / MAX_ACCEPTABLE_STD_DEV, 1.5));
-    // FIX: Use SCORE_WEIGHTS instead of weights
+    const avgDepth = depths.reduce((a, b) => a + b, 0) / depths.length;
+    const stdDev = depths.length > 1 ? Math.sqrt(depths.map(x => Math.pow(x - avgDepth, 2)).reduce((a, b) => a + b) / (depths.length - 1)) : 0;
+
+    // More realistic thresholds for webcam-based analysis
+    const EXCELLENT_STD_DEV = 5;    // Very tight consistency
+    const GOOD_STD_DEV = 12;        // Reasonable consistency
+    const MAX_ACCEPTABLE_STD_DEV = 20; // Still acceptable
+
+    let consistencyProgress;
+    if (stdDev <= EXCELLENT_STD_DEV) {
+        consistencyProgress = 1.0;
+    } else if (stdDev <= GOOD_STD_DEV) {
+        consistencyProgress = 0.8 + 0.2 * (GOOD_STD_DEV - stdDev) / (GOOD_STD_DEV - EXCELLENT_STD_DEV);
+    } else if (stdDev <= MAX_ACCEPTABLE_STD_DEV) {
+        consistencyProgress = 0.3 + 0.5 * (MAX_ACCEPTABLE_STD_DEV - stdDev) / (MAX_ACCEPTABLE_STD_DEV - GOOD_STD_DEV);
+    } else {
+        consistencyProgress = Math.max(0, 0.3 * Math.exp(-0.1 * (stdDev - MAX_ACCEPTABLE_STD_DEV)));
+    }
+
     const consistencyScore = consistencyProgress * SCORE_WEIGHTS.consistency;
-    
-    
-    // --- FINAL SCORE CALCULATION & UI UPDATE ---
-    const totalScore = Math.round(depthScore + symmetryScore + valgusScore + consistencyScore);
-    
+
+    // IMPROVED: Weight scores by confidence for reps with low tracking quality
+    const avgConfidence = finalRepHistory.reduce((sum, rep) => sum + (rep.confidence || 1), 0) / finalRepHistory.length;
+    const confidenceMultiplier = Math.max(0.7, avgConfidence); // Don't penalize too harshly
+
+    const totalScore = Math.round((depthScore + symmetryScore + valgusScore + consistencyScore) * confidenceMultiplier);
+
     const scoreCircle = document.querySelector('.score-circle');
     const scoreValueEl = document.getElementById('report-score-value');
     setTimeout(() => scoreCircle.style.setProperty('--p', totalScore), 100);
     scoreValueEl.innerText = totalScore;
-    
-    document.getElementById('report-quality-overall').innerText = totalScore > 85 ? "Excellent" : totalScore > 65 ? "Good" : "Needs Improvement";
+
+    // IMPROVED: More nuanced quality assessment
+    let qualityText = "Needs Improvement";
+    if (totalScore > 85) qualityText = "Excellent";
+    else if (totalScore > 75) qualityText = "Very Good";
+    else if (totalScore > 60) qualityText = "Good";
+    else if (totalScore > 45) qualityText = "Fair";
+
+    document.getElementById('report-quality-overall').innerText = qualityText;
     document.getElementById('report-depth-avg').innerText = `${avgDepthAngle.toFixed(0)}°`;
     document.getElementById('report-symmetry-avg').innerText = `${avgSymmetryPercent.toFixed(0)}%`;
     document.getElementById('report-valgus-count').innerText = `${valgusCount} of ${finalRepHistory.length} reps`;
 
-    // FIX: Use SCORE_WEIGHTS instead of weights
     updateBreakdown('depth', depthScore, SCORE_WEIGHTS.depth, { avgAngle: avgDepthAngle });
     updateBreakdown('symmetry', symmetryScore, SCORE_WEIGHTS.symmetry, { avgPercent: avgSymmetryPercent });
     updateBreakdown('valgus', valgusScore, SCORE_WEIGHTS.valgus, { count: valgusCount, totalReps: finalRepHistory.length });
     updateBreakdown('consistency', consistencyScore, SCORE_WEIGHTS.consistency, { stdDev: stdDev });
-    
+
     const hipHeightChartCanvas = document.getElementById('hipHeightChart');
     if (hipChartInstance) hipChartInstance.destroy();
     hipChartInstance = renderHipHeightChart(hipHeightChartCanvas, [], []);
