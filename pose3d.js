@@ -1,3 +1,5 @@
+// pose3d.js
+
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.module.js";
 
 // --- Configuration for the Skeleton ---
@@ -15,22 +17,22 @@ const LEFT_INDICES = [11, 13, 15, 23, 25, 27, 29, 31];
 const RIGHT_INDICES = [12, 14, 16, 24, 26, 28, 30, 32];
 const FOOT_INDICES = [29, 30, 31, 32];
 
-/**
- * Manages a single Three.js scene for displaying a MediaPipe skeleton.
- */
+const LEG_CONNECTIONS = [
+    [23, 25], [25, 27], // Left Leg
+    [24, 26], [26, 28]  // Right Leg
+];
+const legConnectionSet = new Set(LEG_CONNECTIONS.map(conn => JSON.stringify(conn.sort())));
+
 class PoseScene {
     constructor(canvas, options = {}) {
         this.canvas = canvas;
         this.options = { autoRotate: false, ...options };
-        
         this.jointSpheres = [];
         this.boneLines = [];
-
         this._init();
     }
 
     _init() {
-        // --- Scene, Camera, Renderer ---
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x1a1a1a);
         this.camera = new THREE.PerspectiveCamera(75, this.canvas.clientWidth / this.canvas.clientHeight, 0.1, 1000);
@@ -38,18 +40,15 @@ class PoseScene {
         this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
         this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
         
-        // --- Lighting & Ground ---
         this.scene.add(new THREE.DirectionalLight(0xffffff, 0.8));
         this.scene.add(new THREE.AmbientLight(0x404040, 2));
         this.scene.add(new THREE.GridHelper(5, 10, 0x888888, 0x444444));
 
-        // --- Skeleton Group ---
         this.skeletonGroup = new THREE.Group();
         this.scene.add(this.skeletonGroup);
 
         this._createSkeleton();
 
-        // --- Render Loop ---
         const animate = () => {
             requestAnimationFrame(animate);
             if (this.options.autoRotate) {
@@ -99,10 +98,15 @@ class PoseScene {
 
         landmarks.forEach((lm, i) => {
             const joint = this.jointSpheres[i];
-            joint.position.set(-lm.x, -lm.y, -lm.z);
-            joint.visible = lm.visibility > 0.5;
-            if (FOOT_INDICES.includes(i) && joint.visible && joint.position.y < lowestY) {
-                lowestY = joint.position.y;
+            // --- FIX: Safely handle null landmarks ---
+            if (lm) {
+                joint.position.set(-lm.x, -lm.y, -lm.z);
+                joint.visible = lm.visibility > 0.5;
+                if (FOOT_INDICES.includes(i) && joint.visible && joint.position.y < lowestY) {
+                    lowestY = joint.position.y;
+                }
+            } else {
+                joint.visible = false;
             }
         });
 
@@ -110,7 +114,8 @@ class PoseScene {
             const start = landmarks[conn[0]];
             const end = landmarks[conn[1]];
             const line = this.boneLines[idx];
-            if (start.visibility > 0.5 && end.visibility > 0.5) {
+            // --- FIX: Safely handle null start/end landmarks for connections ---
+            if (start && end && start.visibility > 0.5 && end.visibility > 0.5) {
                 line.geometry.setFromPoints([this.jointSpheres[conn[0]].position, this.jointSpheres[conn[1]].position]);
                 line.visible = true;
             } else {
@@ -135,33 +140,24 @@ class PoseScene {
         const valgusColor = new THREE.Color(0xFF4136);
         
         CONNECTIONS.forEach((conn, idx) => {
-            // Check if the connection is a leg bone (thigh or shin)
-            const isLegConnection = ([23, 25, 27, 24, 26, 28].includes(conn[0]) && [23, 25, 27, 24, 26, 28].includes(conn[1]));
-            
-            // --- FIX ---
-            // Explicitly identify and exclude the hip-to-hip line from this color update
-            const isHipLine = (conn.includes(23) && conn.includes(24));
+            const line = this.boneLines[idx];
+            const connKey = JSON.stringify(conn.slice().sort());
 
-            if (isLegConnection && !isHipLine) {
-                const line = this.boneLines[idx];
-                let newColor;
-
-                if (hasKneeValgus) {
-                    newColor = valgusColor;
+            if (legConnectionSet.has(connKey)) {
+                let originalColor;
+                if (LEFT_INDICES.includes(conn[0])) {
+                    originalColor = LANDMARK_COLORS.LEFT;
+                } else if (RIGHT_INDICES.includes(conn[0])) {
+                    originalColor = LANDMARK_COLORS.RIGHT;
                 } else {
-                    // Re-calculate the default color only for the actual legs
-                    newColor = LANDMARK_COLORS.CENTER;
-                    if (LEFT_INDICES.includes(conn[0])) newColor = LANDMARK_COLORS.LEFT;
-                    else if (RIGHT_INDICES.includes(conn[0])) newColor = LANDMARK_COLORS.RIGHT;
+                    originalColor = LANDMARK_COLORS.CENTER;
                 }
-
-                line.material.color.set(newColor);
+                line.material.color.set(hasKneeValgus ? valgusColor : originalColor);
             }
         });
     }
 }
 
-// --- Exported Factory Functions ---
 export function createLiveScene(canvas) {
     return new PoseScene(canvas, { autoRotate: true });
 }

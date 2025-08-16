@@ -7,11 +7,12 @@ import {
     calculateAngle,
     getLandmarkProxy,
     SQUAT_THRESHOLD,
-    KNEE_VISIBILITY_THRESHOLD,
-    SYMMETRY_THRESHOLD
+    STANDING_THRESHOLD,
+    analyzeSession
 } from "./posedata.js";
 import { createLiveScene, createPlaybackScene } from "./pose3d.js";
 import { renderHipHeightChart } from "./chart.js";
+import { LandmarkFilter } from "./filter.js";
 
 // --- Configuration ---
 const SQUAT_TARGET = 5;
@@ -37,7 +38,7 @@ const videoUploadInput = document.getElementById('videoUpload');
 // --- State Management ---
 let mediaRecorder;
 let recordedChunks = [];
-let recordedLandmarks = [];
+let recordedWorldLandmarks = [];
 let recordedPoseLandmarks = [];
 let hipHeightData = [];
 let symmetryData = [];
@@ -48,7 +49,17 @@ let liveScene, playbackScene;
 let playbackAnimationId = null;
 let isStoppingSession = false;
 let sessionStopTimeoutId = null;
-let playbackFrameCounter = 0;
+let frameCounter = 0;
+let playbackOffset = 0;
+
+// --- Landmark Filtering ---
+let screenLandmarkFilters = {}; 
+let worldLandmarkFilters = {};
+for (let i = 0; i < 33; i++) {
+    screenLandmarkFilters[i] = new LandmarkFilter();
+    worldLandmarkFilters[i] = new LandmarkFilter();
+}
+let finalRepHistory = [];
 
 // --- MediaPipe Pose ---
 const pose = new Pose({
@@ -56,7 +67,7 @@ const pose = new Pose({
 });
 
 pose.setOptions({
-    modelComplexity: 2,
+    modelComplexity: 2, 
     smoothLandmarks: true,
     minDetectionConfidence: 0.75,
     minTrackingConfidence: 0.8
@@ -78,47 +89,50 @@ const camera = new Camera(videoElement, {
 function onResults(results) {
     if (!isSessionRunning || !videoElement.videoWidth) return;
     
-    updatePose(results);
+    frameCounter++;
+
+    const filteredLandmarks = results.poseLandmarks?.map((lm, i) => lm ? screenLandmarkFilters[i].filter(lm) : null);
+    const filteredWorldLandmarks = results.poseWorldLandmarks?.map((lm, i) => lm ? worldLandmarkFilters[i].filter(lm) : null);
+    
+    updatePose(results, frameCounter, filteredLandmarks, filteredWorldLandmarks);
     const stats = getPoseStats();
 
-    drawFrame(results, stats.kneeValgus);
+    drawFrame({ ...results, poseLandmarks: filteredLandmarks }, stats.kneeValgus);
     
-    if (results.poseLandmarks) {
-        if (results.poseWorldLandmarks) {
-            liveScene.update(results.poseWorldLandmarks);
-            recordedLandmarks.push(JSON.parse(JSON.stringify(results.poseWorldLandmarks)));
-            recordedPoseLandmarks.push(JSON.parse(JSON.stringify(results.poseLandmarks)));
+    if (filteredLandmarks && filteredWorldLandmarks) {
+        liveScene.update(filteredWorldLandmarks);
+        
+        recordedWorldLandmarks.push(JSON.parse(JSON.stringify(filteredWorldLandmarks)));
+        recordedPoseLandmarks.push(JSON.parse(JSON.stringify(filteredLandmarks)));
 
-            const leftHip = results.poseLandmarks[23];
-            const rightHip = results.poseLandmarks[24];
-            if (leftHip.visibility > 0.5 && rightHip.visibility > 0.5) {
-                hipHeightData.push((leftHip.y + rightHip.y) / 2);
-            } else {
-                hipHeightData.push(null);
-            }
-
-            const { left, right } = getLandmarkProxy(results.poseLandmarks);
-            if (left.knee.visibility > KNEE_VISIBILITY_THRESHOLD && right.knee.visibility > KNEE_VISIBILITY_THRESHOLD) {
-                const leftKneeAngle = calculateAngle(left.hip, left.knee, left.ankle);
-                const rightKneeAngle = calculateAngle(right.hip, right.knee, right.ankle);
-                const symmetryDiff = Math.abs(leftKneeAngle - rightKneeAngle);
-                const symmetryPercentage = Math.max(0, 100 - (symmetryDiff / SYMMETRY_THRESHOLD) * 100);
-                symmetryData.push(symmetryPercentage);
-            } else {
-                symmetryData.push(null);
-            }
+        const leftHip = filteredLandmarks[23];
+        const rightHip = filteredLandmarks[24];
+        if (leftHip && rightHip && leftHip.visibility > 0.5 && rightHip.visibility > 0.5) {
+            hipHeightData.push((leftHip.y + rightHip.y) / 2);
+        } else {
+            hipHeightData.push(null);
+        }
+        
+        const { left, right } = getLandmarkProxy(filteredLandmarks);
+        const leftKneeAngle = calculateAngle(left?.hip, left?.knee, left?.ankle);
+        const rightKneeAngle = calculateAngle(right?.hip, right?.knee, right?.ankle);
+        
+        if(leftKneeAngle !== null && rightKneeAngle !== null){
+            const symmetryDiff = Math.abs(leftKneeAngle - rightKneeAngle);
+            const symmetryPercentage = 100 * Math.exp(-0.07 * symmetryDiff);
+            symmetryData.push(symmetryPercentage);
+        } else {
+             symmetryData.push(null);
         }
 
         document.getElementById('rep-counter').innerText = stats.repCount;
-        document.getElementById('rep-quality').innerText = stats.repQuality;
+        document.getElementById('rep-quality').innerText = '...';
         document.getElementById('depth').innerText = stats.depth ? `${stats.depth.toFixed(0)}°` : 'N/A';
         document.getElementById('symmetry').innerText = stats.symmetry ? `${stats.symmetry.toFixed(0)}°` : 'N/A';
         
         if (stats.repCount >= SQUAT_TARGET && !isStoppingSession) {
             isStoppingSession = true;
-            sessionStopTimeoutId = setTimeout(() => {
-                stopSession();
-            }, 1000); 
+            sessionStopTimeoutId = setTimeout(stopSession, 1000); 
         }
     }
 }
@@ -159,6 +173,7 @@ async function startSession() {
     if (!liveScene) liveScene = createLiveScene(document.getElementById('pose3dCanvas'));
     if (!canvasCtx) canvasCtx = outputCanvas.getContext('2d');
     
+    resetSession();
     isStoppingSession = false;
     isSessionRunning = true;
     isProcessingUpload = false;
@@ -182,6 +197,7 @@ async function startSession() {
 }
 
 function startUploadSession(file) {
+    resetSession();
     if (!liveScene) liveScene = createLiveScene(document.getElementById('pose3dCanvas'));
     if (!canvasCtx) canvasCtx = outputCanvas.getContext('2d');
 
@@ -205,13 +221,10 @@ function startUploadSession(file) {
 }
 
 async function processVideoFrames() {
-    if (!isProcessingUpload) return;
-    
-    if (videoElement.paused || videoElement.ended) {
-        stopSession();
+    if (!isProcessingUpload || videoElement.paused || videoElement.ended) {
+        if (isSessionRunning) stopSession();
         return;
     }
-    
     await pose.send({ image: videoElement });
     requestAnimationFrame(processVideoFrames);
 }
@@ -232,7 +245,15 @@ function stopSession() {
 
 function startPlayback() {
     if (playbackAnimationId) cancelAnimationFrame(playbackAnimationId);
-    playbackFrameCounter = 0;
+    if (!playbackScene) playbackScene = createPlaybackScene(playbackCanvas);
+    if (finalRepHistory.length === 0 || recordedWorldLandmarks.length === 0) return;
+
+    const repFrameMap = new Map();
+    finalRepHistory.forEach((rep) => {
+        for (let i = rep.startFrame; i <= rep.endFrame; i++) {
+            repFrameMap.set(i, rep);
+        }
+    });
 
     let frame = 0;
     playButton.disabled = true;
@@ -246,40 +267,21 @@ function startPlayback() {
     }
 
     const animate = () => {
-        if (reportView.style.display === 'none') {
-            playButton.disabled = false;
-            playButton.innerText = "Play 3D Reps";
-            return; 
-        }
-
-        playbackFrameCounter++;
-        if (playbackFrameCounter % 2 !== 0) {
-            playbackAnimationId = requestAnimationFrame(animate);
-            return;
-        }
-
-        if (frame >= recordedLandmarks.length) {
+        if (reportView.style.display === 'none' || frame >= recordedWorldLandmarks.length) {
             playButton.disabled = false;
             playButton.innerText = "Replay";
             return;
         }
 
-        const currentLandmarks = recordedPoseLandmarks[frame];
+        const originalFrame = frame + playbackOffset;
+        const currentRep = repFrameMap.get(originalFrame);
+        const hasKneeValgus = currentRep ? currentRep.kneeValgus : false;
         
-        let hasKneeValgus = false;
-        if (currentLandmarks) {
-            const { left, right } = getLandmarkProxy(currentLandmarks);
-            const VALGUS_THRESHOLD = 0.02;
-            const leftValgus = left.knee.x < left.ankle.x - VALGUS_THRESHOLD;
-            const rightValgus = right.knee.x > right.ankle.x + VALGUS_THRESHOLD;
-            hasKneeValgus = leftValgus || rightValgus;
-        }
-        
-        playbackScene.update(recordedLandmarks[frame]);
+        playbackScene.update(recordedWorldLandmarks[frame]);
         playbackScene.updateColors(hasKneeValgus);
 
         if (hipChartInstance) {
-            hipChartInstance.data.labels.push(frame);
+            hipChartInstance.data.labels.push(originalFrame);
             hipChartInstance.data.datasets[0].data.push(hipHeightData[frame]);
             hipChartInstance.data.datasets[1].data.push(symmetryData[frame]);
             hipChartInstance.update('none'); 
@@ -288,7 +290,6 @@ function startPlayback() {
         frame++;
         playbackAnimationId = requestAnimationFrame(animate);
     };
-
     animate();
 }
 
@@ -299,32 +300,35 @@ function resetSession() {
     if (playbackAnimationId) cancelAnimationFrame(playbackAnimationId);
     if (sessionStopTimeoutId) clearTimeout(sessionStopTimeoutId);
     
-    isStoppingSession = false;
     resetPoseStats();
+    isStoppingSession = false;
+    frameCounter = 0;
+    playbackOffset = 0;
+    finalRepHistory = [];
 
-    recordedLandmarks = [];
+    recordedWorldLandmarks = [];
     recordedPoseLandmarks = [];
     hipHeightData = [];
     symmetryData = [];
+    
+    for (let i = 0; i < 33; i++) {
+        screenLandmarkFilters[i] = new LandmarkFilter();
+        worldLandmarkFilters[i] = new LandmarkFilter();
+    }
 
     if (hipChartInstance) {
         hipChartInstance.destroy();
         hipChartInstance = null;
     }
     
-    // Reset score UI
     const scoreCircle = document.querySelector('.score-circle');
     if (scoreCircle) scoreCircle.style.setProperty('--p', 0);
     document.getElementById('report-score-value').innerText = '0';
-    document.getElementById('breakdown-score-depth').innerText = '0/30';
-    document.getElementById('breakdown-desc-depth').innerText = '';
-    document.getElementById('breakdown-score-symmetry').innerText = '0/30';
-    document.getElementById('breakdown-desc-symmetry').innerText = '';
-    document.getElementById('breakdown-score-valgus').innerText = '0/20';
-    document.getElementById('breakdown-desc-valgus').innerText = '';
-    document.getElementById('breakdown-score-consistency').innerText = '0/20';
-    document.getElementById('breakdown-desc-consistency').innerText = '';
-
+    ['depth', 'symmetry', 'valgus', 'consistency'].forEach(metric => {
+         document.getElementById(`breakdown-score-${metric}`).innerText = `0/${{depth:30, symmetry:30, valgus:20, consistency:20}[metric]}`;
+         document.getElementById(`breakdown-desc-${metric}`).innerText = '';
+    });
+   
     playButton.disabled = false;
     playButton.innerText = "Play 3D Reps";
 
@@ -337,9 +341,7 @@ function resetSession() {
 function updateBreakdown(metric, score, weight, value) {
     const scoreEl = document.getElementById(`breakdown-score-${metric}`);
     const descEl = document.getElementById(`breakdown-desc-${metric}`);
-    
     scoreEl.innerText = `${Math.round(score)}/${weight}`;
-    
     let description = '';
     
     switch (metric) {
@@ -372,11 +374,11 @@ function updateBreakdown(metric, score, weight, value) {
             break;
         case 'consistency':
              if (score > weight * 0.85) {
-                description = `Excellent consistency. You maintained solid form across all repetitions.`;
+                description = `Excellent consistency, with a depth variation of only ${value.toFixed(1)}°. You maintained solid form across all repetitions.`;
             } else if (score > weight * 0.6) {
-                description = `Good job. There were some minor variations in your form. How to improve: Aim for every rep to look and feel exactly the same.`;
+                description = `Good job. There were some minor variations (${value.toFixed(1)}°) in your form. How to improve: Aim for every rep to look and feel exactly the same.`;
             } else {
-                description = `Your form was inconsistent. This can happen when fatigue sets in. How to improve: Focus on controlling the movement, not just completing the reps.`;
+                description = `Your form was inconsistent (depth varied by ${value.toFixed(1)}°). This can happen when fatigue sets in. How to improve: Focus on controlling the movement, not just completing the reps.`;
             }
             break;
     }
@@ -384,72 +386,67 @@ function updateBreakdown(metric, score, weight, value) {
 }
 
 function generateReport() {
-    const { repHistory } = getPoseStats();
-    if (repHistory.length === 0) return;
-
-    // Trim video/data to start just before the first squat
-    let firstSquatStartFrame = recordedPoseLandmarks.findIndex(landmarks => {
-        if (!landmarks) return false;
-        const { left, right } = getLandmarkProxy(landmarks);
-        return calculateAngle(left.hip, left.knee, left.ankle) < SQUAT_THRESHOLD &&
-               calculateAngle(right.hip, right.knee, right.ankle) < SQUAT_THRESHOLD;
-    });
-    if (firstSquatStartFrame === -1) firstSquatStartFrame = 0;
-
-    const playbackStartFrame = Math.max(0, firstSquatStartFrame - PLAYBACK_FPS);
-    if (playbackStartFrame > 0) {
-        recordedLandmarks = recordedLandmarks.slice(playbackStartFrame);
-        recordedPoseLandmarks = recordedPoseLandmarks.slice(playbackStartFrame);
-        hipHeightData = hipHeightData.slice(playbackStartFrame);
-        symmetryData = symmetryData.slice(playbackStartFrame);
+    let allDetectedReps = analyzeSession(recordedPoseLandmarks, recordedWorldLandmarks);
+    
+    if (allDetectedReps.length === 0) {
+        console.log("No valid squats were detected in the session.");
+        return;
     }
+    
+    // --- NEW: Limit the report and playback to the SQUAT_TARGET ---
+    const repsForReport = allDetectedReps.slice(0, SQUAT_TARGET);
+    finalRepHistory = repsForReport; // Update global history for playback
 
-    // --- SCORE CALCULATION ---
+    const firstSquatStartFrame = repsForReport[0].startFrame;
+    const lastSquatEndFrame = repsForReport[repsForReport.length - 1].endFrame;
+    const cropStartFrame = Math.max(0, firstSquatStartFrame - PLAYBACK_FPS);
+    const cropEndFrame = Math.min(frameCounter, lastSquatEndFrame + PLAYBACK_FPS);
+
+    playbackOffset = cropStartFrame;
+    recordedWorldLandmarks = recordedWorldLandmarks.slice(cropStartFrame, cropEndFrame);
+    recordedPoseLandmarks = recordedPoseLandmarks.slice(cropStartFrame, cropEndFrame);
+    hipHeightData = hipHeightData.slice(cropStartFrame, cropEndFrame);
+    symmetryData = symmetryData.slice(cropStartFrame, cropEndFrame);
+    
     const weights = { depth: 30, symmetry: 30, valgus: 20, consistency: 20 };
-    const SQUAT_IDEAL_DEPTH = 90; // Ideal depth in degrees
+    const SQUAT_IDEAL_DEPTH = 90;
 
-    // 1. Depth Score
-    const avgDepthAngle = repHistory.reduce((s, r) => s + r.depth, 0) / repHistory.length;
-    const depthProgress = (SQUAT_THRESHOLD - avgDepthAngle) / (SQUAT_THRESHOLD - SQUAT_IDEAL_DEPTH);
+    const avgDepthAngle = repsForReport.reduce((s, r) => s + r.depth, 0) / repsForReport.length;
+    const depthProgress = (STANDING_THRESHOLD - avgDepthAngle) / (STANDING_THRESHOLD - SQUAT_IDEAL_DEPTH);
     const depthScore = Math.max(0, Math.min(1, depthProgress)) * weights.depth;
 
-    // 2. Symmetry Score
-    const validSymmetryData = symmetryData.filter(s => s !== null && s !== undefined);
-    const avgSymmetryPercent = validSymmetryData.length > 0 ? validSymmetryData.reduce((s, v) => s + v, 0) / validSymmetryData.length : 0;
+    const avgSymmetryDiff = repsForReport.reduce((s, r) => s + r.symmetry, 0) / repsForReport.length;
+    const avgSymmetryPercent = 100 * Math.exp(-0.07 * avgSymmetryDiff);
     const symmetryScore = (avgSymmetryPercent / 100) * weights.symmetry;
 
-    // 3. Knee Valgus Score
-    const valgusCount = repHistory.filter(r => r.kneeValgus).length;
-    const valgusPenalty = (valgusCount / SQUAT_TARGET) * weights.valgus;
+    const valgusCount = repsForReport.filter(r => r.kneeValgus).length;
+    const valgusPenalty = (valgusCount / repsForReport.length) * weights.valgus;
     const valgusScore = Math.max(0, weights.valgus - valgusPenalty);
 
-    // 4. Consistency Score
-    const qualityScores = { "GOOD": 3, "OK": 2, "BAD": 1 };
-    const avgQuality = repHistory.reduce((s, r) => s + qualityScores[r.quality], 0) / repHistory.length;
-    const consistencyScore = (avgQuality / 3) * weights.consistency;
+    const depths = repsForReport.map(r => r.depth);
+    const meanDepth = depths.reduce((a, b) => a + b) / depths.length;
+    const stdDev = depths.length > 1 ? Math.sqrt(depths.map(x => Math.pow(x - meanDepth, 2)).reduce((a, b) => a + b) / (depths.length -1)) : 0;
+    const MAX_ACCEPTABLE_STD_DEV = 10;
+    const consistencyProgress = Math.max(0, 1 - (stdDev / MAX_ACCEPTABLE_STD_DEV));
+    const consistencyScore = consistencyProgress * weights.consistency;
     
-    // Total Score
     const totalScore = Math.round(depthScore + symmetryScore + valgusScore + consistencyScore);
-
-    // --- UPDATE UI ---
+    
     const scoreCircle = document.querySelector('.score-circle');
     const scoreValueEl = document.getElementById('report-score-value');
-    setTimeout(() => { // Timeout allows the animation to be seen
-        scoreCircle.style.setProperty('--p', totalScore);
-    }, 100);
+    setTimeout(() => scoreCircle.style.setProperty('--p', totalScore), 100);
     scoreValueEl.innerText = totalScore;
     
     document.getElementById('report-quality-overall').innerText = totalScore > 85 ? "Excellent" : totalScore > 65 ? "Good" : "Needs Work";
     document.getElementById('report-depth-avg').innerText = `${avgDepthAngle.toFixed(0)}°`;
     document.getElementById('report-symmetry-avg').innerText = `${avgSymmetryPercent.toFixed(0)}%`;
-    document.getElementById('report-valgus-count').innerText = `${valgusCount} of ${SQUAT_TARGET} reps`;
+    document.getElementById('report-valgus-count').innerText = `${valgusCount} of ${repsForReport.length} reps`;
 
     updateBreakdown('depth', depthScore, weights.depth, avgDepthAngle);
     updateBreakdown('symmetry', symmetryScore, weights.symmetry, avgSymmetryPercent);
     updateBreakdown('valgus', valgusScore, weights.valgus, valgusCount);
-    updateBreakdown('consistency', consistencyScore, weights.consistency, avgQuality);
+    updateBreakdown('consistency', consistencyScore, weights.consistency, stdDev);
     
-    // --- Chart ---
     const hipHeightChartCanvas = document.getElementById('hipHeightChart');
     if (hipChartInstance) hipChartInstance.destroy();
     hipChartInstance = renderHipHeightChart(hipHeightChartCanvas, [], []);
@@ -461,5 +458,7 @@ resetButton.addEventListener('click', resetSession);
 playButton.addEventListener('click', startPlayback);
 videoUploadInput.addEventListener('change', (event) => {
     const file = event.target.files[0];
-    if (file) startUploadSession(file);
+    if (file) {
+        startUploadSession(file);
+    }
 });
