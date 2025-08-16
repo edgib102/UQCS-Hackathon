@@ -11,6 +11,11 @@ const vec3 = {
     magnitude: (a) => Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z),
     scale: (a, s) => ({ x: a.x * s, y: a.y * s, z: a.z * s }),
     add: (a, b) => ({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z }),
+    normalize: (a) => {
+        const mag = Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
+        if (mag < 1e-6) return { x: 0, y: 0, z: 0 };
+        return { x: a.x / mag, y: a.y / mag, z: a.z / mag };
+    },
 };
 
 // ---- Helper Functions ----
@@ -32,50 +37,67 @@ export function getLandmarkProxy(landmarks) {
     };
 }
 
-// MODIFIED: Exported the function to be used in the main script
+// MODIFIED: Corrected the 3D valgus calculation logic.
 export function calculateValgusState(screenLandmarks, worldLandmarks) {
     const screenProxy = getLandmarkProxy(screenLandmarks);
-    if (!screenProxy) return { left: 0, right: 0, confidence: 0 };
+    const worldProxy = getLandmarkProxy(worldLandmarks);
 
-    // Check landmark confidence for reliability
+    if (!screenProxy || !worldProxy) {
+        return { left: 0, right: 0, confidence: 0 };
+    }
+
     const avgConfidence = [
         screenProxy.left.hip, screenProxy.left.knee, screenProxy.left.ankle,
         screenProxy.right.hip, screenProxy.right.knee, screenProxy.right.ankle
     ].reduce((sum, lm) => sum + (lm.visibility || 0), 0) / 6;
 
-    if (avgConfidence < 0.5) return { left: 0, right: 0, confidence: avgConfidence };
+    if (avgConfidence < 0.6) {
+        return { left: 0, right: 0, confidence: avgConfidence };
+    }
 
-    // Method 1: Simple knee-to-midline deviation
-    // Calculate the midline between hips and ankles
-    const leftHip = screenProxy.left.hip;
-    const rightHip = screenProxy.right.hip;
-    const leftAnkle = screenProxy.left.ankle;
-    const rightAnkle = screenProxy.right.ankle;
-    const leftKnee = screenProxy.left.knee;
-    const rightKnee = screenProxy.right.knee;
+    const { left: wl, right: wr } = worldProxy;
 
-    // Expected knee position (straight line from hip to ankle)
-    const leftExpectedKneeX = leftHip.x + 0.5 * (leftAnkle.x - leftHip.x);
-    const rightExpectedKneeX = rightHip.x + 0.5 * (rightAnkle.x - rightHip.x);
+    // Define a vector pointing from the person's left hip to their right hip.
+    const hipLateralVec = vec3.subtract(wr.hip, wl.hip);
+    const hipWidth = vec3.magnitude(hipLateralVec);
+    if (hipWidth < 1e-6) {
+        return { left: 0, right: 0, confidence: avgConfidence };
+    }
 
-    // Actual knee deviation from expected position
-    const leftDeviation = Math.abs(leftKnee.x - leftExpectedKneeX);
-    const rightDeviation = Math.abs(rightKnee.x - rightExpectedKneeX);
+    let leftValgusRatio = 0;
+    let rightValgusRatio = 0;
 
-    // Normalize by torso width to account for different body sizes and camera distances
-    const torsoWidth = Math.abs(rightHip.x - leftHip.x);
-    const leftValgusRatio = torsoWidth > 0.01 ? leftDeviation / torsoWidth : 0;
-    const rightValgusRatio = torsoWidth > 0.01 ? rightDeviation / torsoWidth : 0;
+    // --- Analyze Left Leg ---
+    const hipAnkleVecL = vec3.subtract(wl.ankle, wl.hip);
+    if (vec3.magnitude(hipAnkleVecL) > 1e-6) {
+        const hipKneeVecL = vec3.subtract(wl.knee, wl.hip);
+        const tL = vec3.dot(hipKneeVecL, hipAnkleVecL) / vec3.dot(hipAnkleVecL, hipAnkleVecL);
+        const projectionPointL = vec3.add(wl.hip, vec3.scale(hipAnkleVecL, tL));
+        const deviationVecL = vec3.subtract(wl.knee, projectionPointL);
 
-    // Only count as valgus if knee moves toward midline (inward)
-    // For webcam (mirrored), left knee caving in means knee.x > expected
-    // right knee caving in means knee.x < expected
-    const leftValgus = (leftKnee.x < leftExpectedKneeX) ? leftValgusRatio : 0;
-    const rightValgus = (rightKnee.x > rightExpectedKneeX) ? rightValgusRatio : 0;
+        // FIXED: The "inward" direction for the left leg is TOWARDS the right (+hipLateralVec).
+        const inwardDirL = hipLateralVec;
+        const inwardComponentL = vec3.dot(deviationVecL, vec3.normalize(inwardDirL));
+        leftValgusRatio = Math.max(0, inwardComponentL / hipWidth);
+    }
 
+    // --- Analyze Right Leg ---
+    const hipAnkleVecR = vec3.subtract(wr.ankle, wr.hip);
+    if (vec3.magnitude(hipAnkleVecR) > 1e-6) {
+        const hipKneeVecR = vec3.subtract(wr.knee, wr.hip);
+        const tR = vec3.dot(hipKneeVecR, hipAnkleVecR) / vec3.dot(hipAnkleVecR, hipAnkleVecR);
+        const projectionPointR = vec3.add(wr.hip, vec3.scale(hipAnkleVecR, tR));
+        const deviationVecR = vec3.subtract(wr.knee, projectionPointR);
+
+        // FIXED: The "inward" direction for the right leg is TOWARDS the left (-hipLateralVec).
+        const inwardDirR = vec3.scale(hipLateralVec, -1);
+        const inwardComponentR = vec3.dot(deviationVecR, vec3.normalize(inwardDirR));
+        rightValgusRatio = Math.max(0, inwardComponentR / hipWidth);
+    }
+    
     return {
-        left: leftValgus,
-        right: rightValgus,
+        left: leftValgusRatio,
+        right: rightValgusRatio,
         confidence: avgConfidence
     };
 }

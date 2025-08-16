@@ -1,6 +1,0 @@
-symmetry
-squat score 1-100
-range of motion
-depth
-Knee valgus detection (knees caving in).
-torso posture ( low priority)
