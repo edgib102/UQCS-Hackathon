@@ -1,3 +1,5 @@
+// script.js
+
 import { 
     updatePose, 
     getPoseStats, 
@@ -51,12 +53,16 @@ let sessionStopTimeoutId = null; // ADDED: Timeout ID for delayed stop
 const pose = new Pose({
     locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
 });
+
+// --- OPTIMIZED VALUES ---
 pose.setOptions({
-    modelComplexity: 1,
+    modelComplexity: 2, // Use the most accurate, resource-intensive model.
     smoothLandmarks: true,
-    minDetectionConfidence: 0.7,
-    minTrackingConfidence: 0.7
+    minDetectionConfidence: 0.75, // Increase strictness for initial person detection.
+    minTrackingConfidence: 0.8 // Demand high confidence to reduce tracking errors.
 });
+// -------------------------
+
 pose.onResults(onResults);
 
 // --- Camera ---
