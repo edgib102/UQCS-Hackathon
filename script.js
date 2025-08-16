@@ -5,7 +5,8 @@ import {
     getLandmarkProxy,
     calculateAngle,
     analyzeSession,
-    STANDING_THRESHOLD
+    STANDING_THRESHOLD,
+    calculateValgusState // ADDED
 } from "./posedata.js";
 import { createLiveScene, createPlaybackScene } from "./pose3d.js";
 import { renderHipHeightChart } from "./chart.js";
@@ -41,6 +42,7 @@ let recordedWorldLandmarks = [];
 let recordedPoseLandmarks = [];
 let hipHeightData = [];
 let symmetryData = [];
+let valgusData = []; // ADDED
 let hipChartInstance;
 let isSessionRunning = false;
 let isProcessingUpload = false;
@@ -119,6 +121,20 @@ function onResults(results) {
         } else {
              symmetryData.push(null);
         }
+
+        // --- ADDED: Calculate and store knee stability data ---
+        const valgusState = calculateValgusState(filteredLandmarks, filteredWorldLandmarks);
+        if (valgusState.confidence > 0.5) {
+            const maxValgus = Math.max(valgusState.left, valgusState.right);
+            // Convert valgus ratio to a stability percentage.
+            // A higher ratio means more instability, so we invert it.
+            // We'll consider a ratio of 0.24 (double the typical threshold) as 0% stability.
+            const stabilityPercentage = 100 * Math.max(0, 1 - (maxValgus / 0.24));
+            valgusData.push(stabilityPercentage);
+        } else {
+            valgusData.push(null);
+        }
+        // --- END ADDED ---
 
         document.getElementById('depth').innerText = stats.liveDepth ? `${stats.liveDepth.toFixed(0)}°` : 'N/A';
         document.getElementById('symmetry').innerText = stats.liveSymmetry ? `${stats.liveSymmetry.toFixed(0)}°` : 'N/A';
@@ -229,13 +245,17 @@ function startPlayback() {
     let frame = 0;
     playButton.disabled = true;
     playButton.innerText = "Playing...";
-
+    
+    // MODIFIED: Chart is now rendered with full data at report generation.
+    // This section is no longer needed.
+    /*
     if (hipChartInstance) {
         hipChartInstance.data.labels = [];
         hipChartInstance.data.datasets[0].data = [];
         hipChartInstance.data.datasets[1].data = [];
         hipChartInstance.update('none');
     }
+    */
 
     const animate = () => {
         if (reportView.style.display === 'none' || frame >= recordedWorldLandmarks.length) {
@@ -253,13 +273,17 @@ function startPlayback() {
 
         playbackScene.update(recordedWorldLandmarks[frame]);
         playbackScene.updateColors(hasKneeValgus);
-
+        
+        // MODIFIED: Chart is no longer animated frame-by-frame during playback
+        /*
         if (hipChartInstance) {
             hipChartInstance.data.labels.push(originalFrame);
             hipChartInstance.data.datasets[0].data.push(hipHeightData[frame]);
             hipChartInstance.data.datasets[1].data.push(symmetryData[frame]);
             hipChartInstance.update('none');
         }
+        */
+
         frame++;
         playbackAnimationId = requestAnimationFrame(animate);
     };
@@ -279,6 +303,7 @@ function resetSession() {
     recordedPoseLandmarks = [];
     hipHeightData = [];
     symmetryData = [];
+    valgusData = []; // ADDED
 
     for (let i = 0; i < 33; i++) {
         screenLandmarkFilters[i].reset();
@@ -390,7 +415,9 @@ function generateReport() {
     recordedPoseLandmarks = recordedPoseLandmarks.slice(cropStartFrame, cropEndFrame);
     hipHeightData = hipHeightData.slice(cropStartFrame, cropEndFrame);
     symmetryData = symmetryData.slice(cropStartFrame, cropEndFrame);
+    valgusData = valgusData.slice(cropStartFrame, cropEndFrame); // ADDED
 
+    // --- SCORING LOGIC (UNCHANGED) ---
     // IMPROVED: More webcam-friendly depth scoring
     const SQUAT_IDEAL_DEPTH = 90;
     const SQUAT_ATG_DEPTH = 75;
@@ -472,6 +499,8 @@ function generateReport() {
     const confidenceMultiplier = Math.max(0.7, avgConfidence); // Don't penalize too harshly
 
     const totalScore = Math.round((depthScore + symmetryScore + valgusScore + consistencyScore) * confidenceMultiplier);
+    // --- END SCORING LOGIC ---
+
 
     const scoreCircle = document.querySelector('.score-circle');
     const scoreValueEl = document.getElementById('report-score-value');
@@ -495,9 +524,42 @@ function generateReport() {
     updateBreakdown('valgus', valgusScore, SCORE_WEIGHTS.valgus, { count: valgusCount, totalReps: finalRepHistory.length });
     updateBreakdown('consistency', consistencyScore, SCORE_WEIGHTS.consistency, { stdDev: stdDev });
 
+
+    // --- ADDED: Generate consistency data and render the new chart ---
+    // Find the average hip Y-coordinate at the bottom of each rep
+    const repDepthsY = finalRepHistory.map(rep => {
+        // Find the frame index of the deepest point of the squat (trough)
+        const troughFrameInOriginalData = Math.floor((rep.startFrame + rep.endFrame) / 2);
+        // Adjust this index to match the cropped data arrays
+        const adjustedTroughFrame = troughFrameInOriginalData - playbackOffset;
+        
+        if (adjustedTroughFrame >= 0 && adjustedTroughFrame < hipHeightData.length) {
+            return hipHeightData[adjustedTroughFrame];
+        }
+        return null;
+    }).filter(y => y !== null); // Filter out any reps that might be out of bounds
+
+    let avgRepDepthY = null;
+    if (repDepthsY.length > 0) {
+        avgRepDepthY = repDepthsY.reduce((sum, y) => sum + y, 0) / repDepthsY.length;
+    }
+
+    // Create an array of the same length, where every value is the average
+    // This will render as a straight horizontal line on the chart
+    const consistencyData = avgRepDepthY ? Array(hipHeightData.length).fill(avgRepDepthY) : [];
+    
     const hipHeightChartCanvas = document.getElementById('hipHeightChart');
     if (hipChartInstance) hipChartInstance.destroy();
-    hipChartInstance = renderHipHeightChart(hipHeightChartCanvas, [], []);
+    
+    // Pass all four data arrays to the charting function
+    hipChartInstance = renderHipHeightChart(
+        hipHeightChartCanvas, 
+        hipHeightData, 
+        symmetryData,
+        valgusData,
+        consistencyData
+    );
+    // --- END ADDED ---
 }
 
 // --- Event Listeners ---

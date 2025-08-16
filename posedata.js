@@ -32,8 +32,8 @@ export function getLandmarkProxy(landmarks) {
     };
 }
 
-// IMPROVED: Balanced valgus detection - not too strict, not too lenient
-function calculateValgusState(screenLandmarks, worldLandmarks) {
+// MODIFIED: Exported the function to be used in the main script
+export function calculateValgusState(screenLandmarks, worldLandmarks) {
     const screenProxy = getLandmarkProxy(screenLandmarks);
     if (!screenProxy) return { left: 0, right: 0, confidence: 0 };
 
