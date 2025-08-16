@@ -1,0 +1,2 @@
+add different colors and maekup on circle chart
+have first frame appear in 3d initally

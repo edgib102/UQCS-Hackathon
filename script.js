@@ -542,23 +542,6 @@ function generateReport() {
     updateBreakdown('symmetry', symmetryScore, SCORE_WEIGHTS.symmetry, { avgPercent: avgSymmetryPercent });
     updateBreakdown('valgus', valgusScore, SCORE_WEIGHTS.valgus, { count: valgusCount, totalReps: finalRepHistory.length });
     updateBreakdown('consistency', consistencyScore, SCORE_WEIGHTS.consistency, { stdDev: stdDev });
-
-
-    const repDepthsY = finalRepHistory.map(rep => {
-        const troughFrameInOriginalData = Math.floor((rep.startFrame + rep.endFrame) / 2);
-        const adjustedTroughFrame = troughFrameInOriginalData - playbackOffset;
-        if (adjustedTroughFrame >= 0 && adjustedTroughFrame < hipHeightData.length) {
-            return hipHeightData[adjustedTroughFrame];
-        }
-        return null;
-    }).filter(y => y !== null);
-
-    let avgRepDepthY = null;
-    if (repDepthsY.length > 0) {
-        avgRepDepthY = repDepthsY.reduce((sum, y) => sum + y, 0) / repDepthsY.length;
-    }
-
-    const consistencyData = avgRepDepthY ? Array(hipHeightData.length).fill(avgRepDepthY) : [];
     
     const hipHeightChartCanvas = document.getElementById('hipHeightChart');
     if (hipChartInstance) hipChartInstance.destroy();
@@ -567,8 +550,7 @@ function generateReport() {
         hipHeightChartCanvas, 
         hipHeightData, 
         symmetryData,
-        valgusData,
-        consistencyData
+        valgusData
     );
 
     playbackSlider.max = recordedWorldLandmarks.length - 1;

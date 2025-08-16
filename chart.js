@@ -1,10 +1,9 @@
 /**
- * Renders a line chart of hip height, symmetry, stability, and consistency over time.
+ * Renders a line chart of hip height, symmetry, and stability over time.
  * @param {HTMLCanvasElement} canvas The canvas element to draw the chart on.
  * @param {number[]} hipData An array of hip Y-coordinates.
  * @param {number[]} symmetryData An array of symmetry percentages.
  * @param {number[]} stabilityData An array of knee stability percentages.
- * @param {number[]} consistencyData An array representing the average rep depth y-coordinate.
  * @returns {Chart} The Chart.js instance.
  */
 
@@ -35,7 +34,7 @@ const playbackCursorPlugin = {
 
 
 // MODIFIED: Updated function signature and logic
-export function renderHipHeightChart(canvas, hipData, symmetryData, stabilityData, consistencyData) {
+export function renderHipHeightChart(canvas, hipData, symmetryData, stabilityData) {
   if (!canvas) return null;
   const ctx = canvas.getContext('2d');
 
@@ -57,17 +56,6 @@ export function renderHipHeightChart(canvas, hipData, symmetryData, stabilityDat
           tension: 0.4,
           pointRadius: 0,
           yAxisID: 'y', // Assign to the left y-axis
-        },
-        // ADDED: Dataset for the average rep depth line
-        {
-          label: 'Avg. Rep Depth',
-          data: consistencyData,
-          borderColor: '#e0e0e0',
-          borderDash: [5, 5], // Makes the line dotted
-          fill: false,
-          tension: 0.4,
-          pointRadius: 0,
-          yAxisID: 'y', // Shares the left y-axis with Hip Height
         },
         {
           label: 'Symmetry',
