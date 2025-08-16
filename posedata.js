@@ -41,20 +41,20 @@ function calculateValgusState(worldLandmarks) {
     const projL = vec3.dot(hipKneeL, hipAnkleL) / vec3.dot(hipAnkleL, hipAnkleL);
     const closestPointL = vec3.add(proxy.left.hip, vec3.scale(hipAnkleL, projL));
     const deviationL = vec3.subtract(proxy.left.knee, closestPointL);
-    const leftDist = vec3.magnitude(deviationL);
-    const leftIsMedial = deviationL.x > 0;
 
     const hipAnkleR = vec3.subtract(proxy.right.ankle, proxy.right.hip);
     const hipKneeR = vec3.subtract(proxy.right.knee, proxy.right.hip);
     const projR = vec3.dot(hipKneeR, hipAnkleR) / vec3.dot(hipAnkleR, hipAnkleR);
     const closestPointR = vec3.add(proxy.right.hip, vec3.scale(hipAnkleR, projR));
     const deviationR = vec3.subtract(proxy.right.knee, closestPointR);
-    const rightDist = vec3.magnitude(deviationR);
-    const rightIsMedial = deviationR.x < 0;
+    
+    // FIX: Only measure the medial (X-axis) component of the deviation for a more accurate valgus score.
+    const leftValgusDistance = deviationL.x > 0 ? deviationL.x : 0;
+    const rightValgusDistance = deviationR.x < 0 ? Math.abs(deviationR.x) : 0;
 
     return {
-        left: leftIsMedial ? leftDist : 0,
-        right: rightIsMedial ? rightDist : 0,
+        left: leftValgusDistance,
+        right: rightValgusDistance,
     };
 }
 

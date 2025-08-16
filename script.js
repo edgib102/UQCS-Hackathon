@@ -13,6 +13,8 @@ import { LandmarkFilter } from "./filter.js";
 
 // --- Configuration ---
 const PLAYBACK_FPS = 30;
+const SCORE_WEIGHTS = { depth: 15, symmetry: 30, valgus: 30, consistency: 25 };
+
 
 // --- DOM Elements ---
 const videoElement = document.getElementById('video');
@@ -290,10 +292,9 @@ function resetSession() {
     if (scoreCircle) scoreCircle.style.setProperty('--p', 0);
     document.getElementById('report-score-value').innerText = '0';
     ['depth', 'symmetry', 'valgus', 'consistency'].forEach(metric => {
-         document.getElementById(`breakdown-score-${metric}`).innerText = `0/${{depth:30, symmetry:30, valgus:20, consistency:20}[metric]}`;
+         document.getElementById(`breakdown-score-${metric}`).innerText = `0/${SCORE_WEIGHTS[metric]}`;
          document.getElementById(`breakdown-desc-${metric}`).innerText = '';
     });
-   
     playButton.disabled = false;
     playButton.innerText = "Play 3D Reps";
 
@@ -388,8 +389,6 @@ function generateReport() {
     hipHeightData = hipHeightData.slice(cropStartFrame, cropEndFrame);
     symmetryData = symmetryData.slice(cropStartFrame, cropEndFrame);
     
-    const weights = { depth: 30, symmetry: 30, valgus: 20, consistency: 20 };
-
     // --- 1. DEPTH SCORING (Optimized with non-linear curve and ATG bonus) ---
     const SQUAT_IDEAL_DEPTH = 90; // Parallel is the goal for a full score
     const SQUAT_ATG_DEPTH = 75;   // "Ass-to-grass" depth for bonus points
@@ -407,19 +406,22 @@ function generateReport() {
     const atgBonus = avgDepthAngle < SQUAT_IDEAL_DEPTH 
         ? ((SQUAT_IDEAL_DEPTH - Math.max(SQUAT_ATG_DEPTH, avgDepthAngle)) / (SQUAT_IDEAL_DEPTH - SQUAT_ATG_DEPTH)) * 0.15 // Bonus up to 15%
         : 0;
-    const depthScore = Math.min(1.0, baseProgress + atgBonus) * weights.depth;
+    // FIX: Use SCORE_WEIGHTS instead of weights
+    const depthScore = Math.min(1.0, baseProgress + atgBonus) * SCORE_WEIGHTS.depth;
 
 
     // --- 2. SYMMETRY SCORING (Original exponential model is effective) ---
     const avgSymmetryDiff = finalRepHistory.reduce((s, r) => s + r.symmetry, 0) / finalRepHistory.length;
     const avgSymmetryPercent = 100 * Math.exp(-0.07 * avgSymmetryDiff);
-    const symmetryScore = (avgSymmetryPercent / 100) * weights.symmetry;
+    // FIX: Use SCORE_WEIGHTS instead of weights
+    const symmetryScore = (avgSymmetryPercent / 100) * SCORE_WEIGHTS.symmetry;
 
 
     // --- 3. VALGUS SCORING (Optimized to penalize per-rep events and severity) ---
     const VALGUS_THRESHOLD_METERS = 0.03; // 3cm deviation is a flag
     const SEVERE_VALGUS_METERS = 0.06;    // 6cm is a major issue
-    let valgusScore = weights.valgus;
+    // FIX: Use SCORE_WEIGHTS instead of weights
+    let valgusScore = SCORE_WEIGHTS.valgus;
     let valgusCount = 0;
 
     finalRepHistory.forEach(rep => {
@@ -427,7 +429,8 @@ function generateReport() {
         if (maxValgus > VALGUS_THRESHOLD_METERS) {
             valgusCount++;
             // Base penalty scales with set length to be fair
-            let penalty = weights.valgus / Math.max(5, finalRepHistory.length);
+            // FIX: Use SCORE_WEIGHTS instead of weights
+            let penalty = SCORE_WEIGHTS.valgus / Math.max(5, finalRepHistory.length);
             // Add a severity multiplier for significant knee cave
             if (maxValgus > SEVERE_VALGUS_METERS) {
                 penalty *= 1.5;
@@ -441,10 +444,11 @@ function generateReport() {
     // --- 4. CONSISTENCY SCORING (Optimized with stricter threshold and power curve) ---
     const depths = finalRepHistory.map(r => r.depth);
     const stdDev = depths.length > 1 ? Math.sqrt(depths.map(x => Math.pow(x - avgDepthAngle, 2)).reduce((a, b) => a + b) / (depths.length - 1)) : 0;
-    const MAX_ACCEPTABLE_STD_DEV = 4; // Stricter than before
+    const MAX_ACCEPTABLE_STD_DEV = 8; 
     // Use a power curve to penalize larger deviations more heavily
     const consistencyProgress = Math.max(0, 1 - Math.pow(stdDev / MAX_ACCEPTABLE_STD_DEV, 1.5));
-    const consistencyScore = consistencyProgress * weights.consistency;
+    // FIX: Use SCORE_WEIGHTS instead of weights
+    const consistencyScore = consistencyProgress * SCORE_WEIGHTS.consistency;
     
     
     // --- FINAL SCORE CALCULATION & UI UPDATE ---
@@ -460,10 +464,11 @@ function generateReport() {
     document.getElementById('report-symmetry-avg').innerText = `${avgSymmetryPercent.toFixed(0)}%`;
     document.getElementById('report-valgus-count').innerText = `${valgusCount} of ${finalRepHistory.length} reps`;
 
-    updateBreakdown('depth', depthScore, weights.depth, { avgAngle: avgDepthAngle });
-    updateBreakdown('symmetry', symmetryScore, weights.symmetry, { avgPercent: avgSymmetryPercent });
-    updateBreakdown('valgus', valgusScore, weights.valgus, { count: valgusCount, totalReps: finalRepHistory.length });
-    updateBreakdown('consistency', consistencyScore, weights.consistency, { stdDev: stdDev });
+    // FIX: Use SCORE_WEIGHTS instead of weights
+    updateBreakdown('depth', depthScore, SCORE_WEIGHTS.depth, { avgAngle: avgDepthAngle });
+    updateBreakdown('symmetry', symmetryScore, SCORE_WEIGHTS.symmetry, { avgPercent: avgSymmetryPercent });
+    updateBreakdown('valgus', valgusScore, SCORE_WEIGHTS.valgus, { count: valgusCount, totalReps: finalRepHistory.length });
+    updateBreakdown('consistency', consistencyScore, SCORE_WEIGHTS.consistency, { stdDev: stdDev });
     
     const hipHeightChartCanvas = document.getElementById('hipHeightChart');
     if (hipChartInstance) hipChartInstance.destroy();
