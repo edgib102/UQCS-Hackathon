@@ -1,5 +1,5 @@
 import { updatePose, getPoseStats, resetPoseStats } from "./posedata.js";
-import { init3DScene, updateSkeleton } from "./pose3d.js";
+import { createLiveScene, createPlaybackScene } from "./pose3d.js";
 
 // --- Configuration ---
 const SQUAT_TARGET = 5;
@@ -8,7 +8,7 @@ const SQUAT_TARGET = 5;
 const videoElement = document.getElementById('video');
 const outputCanvas = document.getElementById('outputCanvas');
 const canvasCtx = outputCanvas.getContext('2d');
-const pose3dCanvas = document.getElementById('pose3dCanvas');
+const playbackCanvas = document.getElementById('playbackCanvas');
 
 const startView = document.getElementById('startView');
 const sessionView = document.getElementById('sessionView');
@@ -18,28 +18,28 @@ const loadingElement = document.getElementById('loading');
 const startButton = document.getElementById('startButton');
 const resetButton = document.getElementById('resetButton');
 const downloadButton = document.getElementById('downloadButton');
+const playButton = document.getElementById('playButton');
 
 // --- State Management ---
 let mediaRecorder;
 let recordedChunks = [];
+let recordedLandmarks = [];
 let isSessionRunning = false;
-let animationFrameId;
+let liveScene, playbackScene;
 
-// --- Initialize 3D Scene ---
-init3DScene(pose3dCanvas);
+// --- Initialize Live 3D Scene ---
+liveScene = createLiveScene(document.getElementById('pose3dCanvas'));
 
 // --- MediaPipe Pose ---
 const pose = new Pose({
     locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
 });
-
 pose.setOptions({
     modelComplexity: 1,
     smoothLandmarks: true,
     minDetectionConfidence: 0.7,
     minTrackingConfidence: 0.7
 });
-
 pose.onResults(onResults);
 
 // --- Camera ---
@@ -53,33 +53,30 @@ const camera = new Camera(videoElement, {
 });
 
 // --- Main Application Logic ---
-
 function onResults(results) {
     if (!videoElement.videoWidth) return;
     
-    // UI setup on first frame
     if (loadingElement.style.display !== 'none') {
         loadingElement.style.display = 'none';
         videoElement.style.display = 'block';
     }
     
-    // Draw 2D and update 3D
     drawFrame(results);
+    
     if (results.poseWorldLandmarks) {
-        updateSkeleton(results.poseWorldLandmarks);
+        liveScene.update(results.poseWorldLandmarks);
+        // Store a deep copy of the landmarks for playback
+        recordedLandmarks.push(JSON.parse(JSON.stringify(results.poseWorldLandmarks)));
     }
     
-    // Update pose logic
     updatePose(results);
     const stats = getPoseStats();
     
-    // Update live UI
     document.getElementById('rep-counter').innerText = stats.repCount;
     document.getElementById('rep-quality').innerText = stats.repQuality;
     document.getElementById('depth').innerText = stats.depth ? `${stats.depth.toFixed(0)}°` : 'N/A';
     document.getElementById('symmetry').innerText = stats.symmetry ? `${stats.symmetry.toFixed(0)}°` : 'N/A';
     
-    // Check for session completion
     if (stats.repCount >= SQUAT_TARGET) {
         stopSession();
     }
@@ -98,8 +95,7 @@ function drawFrame(results) {
     canvasCtx.restore();
 }
 
-// --- Session Control ---
-
+// --- Session & Playback Control ---
 async function startSession() {
     isSessionRunning = true;
     startView.style.display = 'none';
@@ -109,31 +105,20 @@ async function startSession() {
 
     await camera.start();
     
-    // Start recording
-    const stream = outputCanvas.captureStream(30); // 30 FPS
+    const stream = outputCanvas.captureStream(30);
     mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-
-    mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-            recordedChunks.push(event.data);
-        }
-    };
-
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
     mediaRecorder.onstop = () => {
         const blob = new Blob(recordedChunks, { type: 'video/webm' });
-        const url = URL.createObjectURL(blob);
-        downloadButton.href = url;
+        downloadButton.href = URL.createObjectURL(blob);
         recordedChunks = [];
     };
-    
     mediaRecorder.start();
 }
 
 function stopSession() {
     isSessionRunning = false;
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-        mediaRecorder.stop();
-    }
+    if (mediaRecorder?.state === 'recording') mediaRecorder.stop();
     camera.stop();
 
     videoElement.style.display = 'none';
@@ -141,14 +126,37 @@ function stopSession() {
     reportView.style.display = 'block';
     
     generateReport();
+    
+    // Initialize the playback scene once the report is shown
+    if (!playbackScene) {
+        playbackScene = createPlaybackScene(playbackCanvas);
+    }
 }
+
+function startPlayback() {
+    let frame = 0;
+    const animate = () => {
+        if (frame >= recordedLandmarks.length) {
+            frame = 0; // Loop the playback
+        }
+        playbackScene.update(recordedLandmarks[frame]);
+        frame++;
+        requestAnimationFrame(animate);
+    };
+    animate();
+    playButton.disabled = true;
+    playButton.innerText = "Playing...";
+}
+
 
 function resetSession() {
     reportView.style.display = 'none';
     startView.style.display = 'block';
     resetPoseStats();
+    recordedLandmarks = [];
+    playButton.disabled = false;
+    playButton.innerText = "Play 3D Reps";
 
-    // Update UI for reset state
     document.getElementById('rep-counter').innerText = '0';
     document.getElementById('rep-quality').innerText = 'N/A';
     document.getElementById('depth').innerText = 'N/A';
@@ -159,13 +167,12 @@ function generateReport() {
     const { repHistory } = getPoseStats();
     if (repHistory.length === 0) return;
 
-    const avgDepth = repHistory.reduce((sum, rep) => sum + rep.depth, 0) / repHistory.length;
-    const avgSymmetry = repHistory.reduce((sum, rep) => sum + (rep.symmetry || 0), 0) / repHistory.length;
-    const valgusCount = repHistory.filter(rep => rep.kneeValgus).length;
-    
+    const avgDepth = repHistory.reduce((s, r) => s + r.depth, 0) / repHistory.length;
+    const avgSymmetry = repHistory.reduce((s, r) => s + (r.symmetry || 0), 0) / repHistory.length;
+    const valgusCount = repHistory.filter(r => r.kneeValgus).length;
     const qualityScores = { "GOOD": 3, "OK": 2, "BAD": 1 };
-    const avgQualityScore = repHistory.reduce((sum, rep) => sum + qualityScores[rep.quality], 0) / repHistory.length;
-    const overallQuality = avgQualityScore > 2.5 ? "Excellent" : avgQualityScore > 1.5 ? "Good" : "Needs Work";
+    const avgQuality = repHistory.reduce((s, r) => s + qualityScores[r.quality], 0) / repHistory.length;
+    const overallQuality = avgQuality > 2.5 ? "Excellent" : avgQuality > 1.5 ? "Good" : "Needs Work";
 
     document.getElementById('report-quality-overall').innerText = overallQuality;
     document.getElementById('report-depth-avg').innerText = `${avgDepth.toFixed(0)}°`;
@@ -176,3 +183,4 @@ function generateReport() {
 // --- Event Listeners ---
 startButton.addEventListener('click', startSession);
 resetButton.addEventListener('click', resetSession);
+playButton.addEventListener('click', startPlayback);

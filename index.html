@@ -60,17 +60,26 @@
         <div id="reportView" style="display: none;">
             <div class="card">
                 <h2>Session Report</h2>
-                <div class="report-grid">
-                    <div><strong>Overall Quality:</strong> <span id="report-quality-overall"></span></div>
-                    <div><strong>Average Depth:</strong> <span id="report-depth-avg"></span></div>
-                    <div><strong>Average Symmetry:</strong> <span id="report-symmetry-avg"></span></div>
-                    <div><strong>Knee Valgus Warnings:</strong> <span id="report-valgus-count"></span></div>
+                <div class="report-content">
+                    <div class="report-stats">
+                        <div class="report-grid">
+                            <div><strong>Overall Quality:</strong> <span id="report-quality-overall"></span></div>
+                            <div><strong>Average Depth:</strong> <span id="report-depth-avg"></span></div>
+                            <div><strong>Average Symmetry:</strong> <span id="report-symmetry-avg"></span></div>
+                            <div><strong>Knee Valgus Warnings:</strong> <span id="report-valgus-count"></span></div>
+                        </div>
+                        <p>Review your form in the 3D playback, download the recording, or try again.</p>
+                        <div class="button-group">
+                             <button id="playButton">Play 3D Reps</button>
+                            <a id="downloadButton" class="button" download="squat_session.webm">Download Video</a>
+                        </div>
+                    </div>
+                    <div class="playback-container">
+                        <canvas id="playbackCanvas"></canvas>
+                         <p class="playback-text">3D PLAYBACK</p>
+                    </div>
                 </div>
-                <p>Your form analysis is complete. Download the recording or try again.</p>
-                <div class="button-group">
-                    <a id="downloadButton" class="button" download="squat_session.webm">Download Video</a>
-                    <button id="resetButton">Go Again</button>
-                </div>
+                 <button id="resetButton">Go Again</button>
             </div>
         </div>
     </div>
