@@ -44,6 +44,8 @@ let isSessionRunning = false;
 let isProcessingUpload = false; // New Line
 let liveScene, playbackScene;
 let playbackAnimationId = null; // To control the animation loop
+let isStoppingSession = false; // ADDED: Flag to prevent multiple stop calls
+let sessionStopTimeoutId = null; // ADDED: Timeout ID for delayed stop
 
 // --- MediaPipe Pose ---
 const pose = new Pose({
@@ -71,14 +73,12 @@ const camera = new Camera(videoElement, {
 function onResults(results) {
     if (!isSessionRunning || !videoElement.videoWidth) return;
     
-    // --- 1. Initial UI Setup ---
-    if (loadingElement.style.display !== 'none') {
-        loadingElement.style.display = 'none';
-        videoElement.style.display = 'block';
-    }
-    
-    // --- 2. Draw the Video Frame and Skeleton ---
-    drawFrame(results);
+    // Get latest pose stats first
+    updatePose(results);
+    const stats = getPoseStats();
+
+    // MODIFIED: Pass the kneeValgus state to the draw function
+    drawFrame(results, stats.kneeValgus);
     
     if (results.poseLandmarks) {
         if (results.poseWorldLandmarks) {
@@ -108,9 +108,6 @@ function onResults(results) {
             }
         }
 
-        updatePose(results);
-        const stats = getPoseStats();
-
         document.getElementById('rep-counter').innerText = stats.repCount;
         document.getElementById('rep-quality').innerText = stats.repQuality;
         document.getElementById('depth').innerText = stats.depth ? `${stats.depth.toFixed(0)}°` : 'N/A';
@@ -125,7 +122,8 @@ function onResults(results) {
     }
 }
 
-function drawFrame(results) {
+// MODIFIED: This function now accepts a boolean to control leg color
+function drawFrame(results, kneeValgus = false) {
     if (loadingElement.style.display !== 'none') {
         loadingElement.style.display = 'none';
         videoElement.style.display = 'block';
@@ -137,9 +135,23 @@ function drawFrame(results) {
     canvasCtx.drawImage(videoElement, 0, 0, outputCanvas.width, outputCanvas.height);
     
     if (results.poseLandmarks) {
+        // Define which connections belong to the legs
+        const legConnections = new Set([[23, 25], [25, 27], [24, 26], [26, 28]].map(JSON.stringify));
+        
+        // Separate the connections for conditional coloring
+        const otherBodyConnections = POSE_CONNECTIONS.filter(conn => {
+            return conn[0] > 10 && conn[1] > 10 && !legConnections.has(JSON.stringify(conn.sort((a,b) => a-b)));
+        });
+        const legConnectionArray = Array.from(legConnections).map(JSON.parse);
+
+        const legColor = kneeValgus ? '#FF4136' : '#DDDDDD'; // Use a bright red for valgus
+
+        // Draw the main body and the legs with their respective colors
+        drawConnectors(canvasCtx, results.poseLandmarks, otherBodyConnections, { color: '#DDDDDD', lineWidth: 4 });
+        drawConnectors(canvasCtx, results.poseLandmarks, legConnectionArray, { color: legColor, lineWidth: 6 });
+
+        // Draw only the body landmarks (excluding the face)
         const bodyLandmarks = results.poseLandmarks.slice(11);
-        const bodyConnections = POSE_CONNECTIONS.filter(([start, end]) => start > 10 && end > 10);
-        drawConnectors(canvasCtx, results.poseLandmarks, bodyConnections, { color: '#DDDDDD', lineWidth: 4 });
         drawLandmarks(canvasCtx, bodyLandmarks, { color: '#00CFFF', lineWidth: 2 });
     }
     
@@ -157,12 +169,12 @@ async function startSession() {
     
     isStoppingSession = false;
     isSessionRunning = true;
-    isProcessingUpload = false; // New Line
+    isProcessingUpload = false;
     startView.style.display = 'none';
     reportView.style.display = 'none';
     sessionView.style.display = 'block';
     loadingElement.style.display = 'flex';
-    downloadButton.style.display = 'inline-block'; // New Line
+    downloadButton.style.display = 'inline-block';
 
     await camera.start();
     
@@ -192,7 +204,7 @@ function startUploadSession(file) {
     reportView.style.display = 'none';
     sessionView.style.display = 'block';
     loadingElement.style.display = 'flex';
-    downloadButton.style.display = 'none'; // New Line
+    downloadButton.style.display = 'none';
 
     videoElement.style.display = 'block';
     videoElement.controls = true;

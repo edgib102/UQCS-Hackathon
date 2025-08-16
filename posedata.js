@@ -9,6 +9,7 @@ export let repQuality = "N/A";
 export let symmetry = null;
 export let rangeOfMotion = { min: null, max: null };
 export let depth = null;
+export let kneeValgusState = false; // ADDED: Live state for knee valgus
 
 // ---- Private state variables ----
 let repStartTime = null;
@@ -38,6 +39,7 @@ export function updatePose(results) {
 
     symmetry = Math.abs(leftKneeAngle - rightKneeAngle);
     const kneeValgus = checkKneeValgus(left, right, leftVisible, rightVisible);
+    kneeValgusState = kneeValgus; // ADDED: Update the live state every frame
 
     const avgAngle = (leftKneeAngle + rightKneeAngle) / 2;
 
@@ -81,7 +83,8 @@ export function updatePose(results) {
 }
 
 export function getPoseStats() {
-    return { repCount, repQuality, symmetry, depth, repHistory };
+    // MODIFIED: Added kneeValgus to the returned object
+    return { repCount, repQuality, symmetry, depth, repHistory, kneeValgus: kneeValgusState };
 }
 
 // ---- New Reset Function ----
@@ -94,6 +97,7 @@ export function resetPoseStats() {
     symmetry = null;
     rangeOfMotion = { min: null, max: null };
     depth = null;
+    kneeValgusState = false; // ADDED: Reset the state
 }
 
 // ---- Helper Functions ----
