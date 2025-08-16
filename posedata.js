@@ -7,9 +7,8 @@ export let repState = 'UP'; // FSM: UP, DOWN
 // ---- Live Rep Data ----
 export let repQuality = "N/A";
 export let symmetry = null;
-export let rangeOfMotion = { min: null, max: null };
-export let depth = null;
-export let kneeValgusState = false; // ADDED: Live state for knee valgus
+export let depth = null; // This will now be the minimum angle in the current rep
+export let kneeValgusState = false;
 
 // ---- Private state variables ----
 let repStartTime = null;
@@ -18,7 +17,7 @@ let repStartTime = null;
 const STANDING_THRESHOLD = 160;
 export const SQUAT_THRESHOLD = 110;
 export const KNEE_VISIBILITY_THRESHOLD = 0.8;
-export const SYMMETRY_THRESHOLD = 20; // Export this
+export const SYMMETRY_THRESHOLD = 20;
 const VALGUS_THRESHOLD = 0.02;
 
 // ---- Main pose update function ----
@@ -31,7 +30,6 @@ export function updatePose(results) {
     const leftVisible = left.knee.visibility > KNEE_VISIBILITY_THRESHOLD;
     const rightVisible = right.knee.visibility > KNEE_VISIBILITY_THRESHOLD;
     
-    // If both knees are not visible, don't update pose
     if (!leftVisible || !rightVisible) return;
 
     const leftKneeAngle = calculateAngle(left.hip, left.knee, left.ankle);
@@ -39,55 +37,55 @@ export function updatePose(results) {
 
     symmetry = Math.abs(leftKneeAngle - rightKneeAngle);
     const kneeValgus = checkKneeValgus(left, right, leftVisible, rightVisible);
-    kneeValgusState = kneeValgus; // ADDED: Update the live state every frame
+    kneeValgusState = kneeValgus;
 
     const avgAngle = (leftKneeAngle + rightKneeAngle) / 2;
-
-    rangeOfMotion.min = Math.min(rangeOfMotion.min ?? avgAngle, avgAngle);
-    rangeOfMotion.max = Math.max(rangeOfMotion.max ?? avgAngle, avgAngle);
-    depth = rangeOfMotion.max - rangeOfMotion.min;
 
     // ---- Rep Counting FSM ----
     const now = performance.now();
     if (repState === 'UP' && leftKneeAngle < SQUAT_THRESHOLD && rightKneeAngle < SQUAT_THRESHOLD) {
         repState = 'DOWN';
         repStartTime = now;
-    } else if (repState === 'DOWN' && leftKneeAngle > STANDING_THRESHOLD && rightKneeAngle > STANDING_THRESHOLD) {
-        repCount++;
-        repState = 'UP';
-        
-        const totalTime = (now - repStartTime) / 1000;
-        
-        if (depth < (STANDING_THRESHOLD - SQUAT_THRESHOLD - 10) || kneeValgus || (symmetry && symmetry > SYMMETRY_THRESHOLD)) {
-            repQuality = "BAD";
-        } else if (symmetry && symmetry > (SYMMETRY_THRESHOLD / 2)) {
-            repQuality = "OK";
-        } else {
-            repQuality = "GOOD";
-        }
-        
-        // Store the completed rep's data
-        repHistory.push({
-            quality: repQuality,
-            depth: depth,
-            symmetry: symmetry,
-            kneeValgus: kneeValgus,
-            eccentricTime: totalTime / 2, // Simple split for now
-            concentricTime: totalTime / 2,
-        });
+        depth = avgAngle; // Initialize depth for this new rep
+    } else if (repState === 'DOWN') {
+        // Update live depth with the lowest angle found so far in this rep
+        depth = Math.min(depth ?? 180, avgAngle);
 
-        // Reset for next rep
-        rangeOfMotion = { min: null, max: null };
-        depth = null;
+        if (leftKneeAngle > STANDING_THRESHOLD && rightKneeAngle > STANDING_THRESHOLD) {
+            repCount++;
+            repState = 'UP';
+            
+            const totalTime = (now - repStartTime) / 1000;
+            
+            // Check quality based on the minimum depth achieved
+            if (depth > SQUAT_THRESHOLD || kneeValgus || (symmetry && symmetry > SYMMETRY_THRESHOLD)) {
+                repQuality = "BAD";
+            } else if (symmetry && symmetry > (SYMMETRY_THRESHOLD / 2)) {
+                repQuality = "OK";
+            } else {
+                repQuality = "GOOD";
+            }
+            
+            // Store the completed rep's data
+            repHistory.push({
+                quality: repQuality,
+                depth: depth, // This is the minimum angle for the rep
+                symmetry: symmetry,
+                kneeValgus: kneeValgus,
+                eccentricTime: totalTime / 2,
+                concentricTime: totalTime / 2,
+            });
+
+            // Reset for next rep
+            depth = null;
+        }
     }
 }
 
 export function getPoseStats() {
-    // MODIFIED: Added kneeValgus to the returned object
     return { repCount, repQuality, symmetry, depth, repHistory, kneeValgus: kneeValgusState };
 }
 
-// ---- New Reset Function ----
 export function resetPoseStats() {
     repHistory = [];
     latestPose = null;
@@ -95,9 +93,8 @@ export function resetPoseStats() {
     repState = 'UP';
     repQuality = "N/A";
     symmetry = null;
-    rangeOfMotion = { min: null, max: null };
     depth = null;
-    kneeValgusState = false; // ADDED: Reset the state
+    kneeValgusState = false;
 }
 
 // ---- Helper Functions ----

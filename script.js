@@ -48,21 +48,19 @@ let liveScene, playbackScene;
 let playbackAnimationId = null;
 let isStoppingSession = false;
 let sessionStopTimeoutId = null;
-let playbackFrameCounter = 0; // New counter for playback speed
+let playbackFrameCounter = 0;
 
 // --- MediaPipe Pose ---
 const pose = new Pose({
     locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
 });
 
-// --- OPTIMIZED VALUES ---
 pose.setOptions({
-    modelComplexity: 2, // Use the most accurate, resource-intensive model.
+    modelComplexity: 2,
     smoothLandmarks: true,
-    minDetectionConfidence: 0.75, // Increase strictness for initial person detection.
-    minTrackingConfidence: 0.8 // Demand high confidence to reduce tracking errors.
+    minDetectionConfidence: 0.75,
+    minTrackingConfidence: 0.8
 });
-// -------------------------
 
 pose.onResults(onResults);
 
@@ -137,7 +135,7 @@ function drawFrame(results, kneeValgus = false) {
     canvasCtx.drawImage(videoElement, 0, 0, outputCanvas.width, outputCanvas.height);
     
     if (results.poseLandmarks) {
-        const legConnections = new Set([[23, 25], [25, 27], [24, 26], [26, 28]].map(JSON.stringify));
+        const legConnections = new Set([[23, 25], [25, 27], [24, 26], [26, 28]].map(c => JSON.stringify(c.sort((a,b) => a-b))));
         
         const otherBodyConnections = POSE_CONNECTIONS.filter(conn => {
             return conn[0] > 10 && conn[1] > 10 && !legConnections.has(JSON.stringify(conn.sort((a,b) => a-b)));
@@ -158,12 +156,8 @@ function drawFrame(results, kneeValgus = false) {
 
 // --- Session & Playback Control ---
 async function startSession() {
-    if (!liveScene) {
-        liveScene = createLiveScene(document.getElementById('pose3dCanvas'));
-    }
-    if (!canvasCtx) {
-        canvasCtx = outputCanvas.getContext('2d');
-    }
+    if (!liveScene) liveScene = createLiveScene(document.getElementById('pose3dCanvas'));
+    if (!canvasCtx) canvasCtx = outputCanvas.getContext('2d');
     
     isStoppingSession = false;
     isSessionRunning = true;
@@ -188,12 +182,8 @@ async function startSession() {
 }
 
 function startUploadSession(file) {
-    if (!liveScene) {
-        liveScene = createLiveScene(document.getElementById('pose3dCanvas'));
-    }
-    if (!canvasCtx) {
-        canvasCtx = outputCanvas.getContext('2d');
-    }
+    if (!liveScene) liveScene = createLiveScene(document.getElementById('pose3dCanvas'));
+    if (!canvasCtx) canvasCtx = outputCanvas.getContext('2d');
 
     isSessionRunning = true;
     isProcessingUpload = true;
@@ -228,13 +218,8 @@ async function processVideoFrames() {
 
 function stopSession() {
     isSessionRunning = false;
-    
-    if (!isProcessingUpload && mediaRecorder?.state === 'recording') {
-        mediaRecorder.stop();
-    }
-    if (!isProcessingUpload) {
-        camera.stop();
-    }
+    if (!isProcessingUpload && mediaRecorder?.state === 'recording') mediaRecorder.stop();
+    if (!isProcessingUpload) camera.stop();
     
     videoElement.style.display = 'none';
     sessionView.style.display = 'none';
@@ -242,16 +227,12 @@ function stopSession() {
     
     generateReport();
     
-    if (!playbackScene) {
-        playbackScene = createPlaybackScene(playbackCanvas);
-    }
+    if (!playbackScene) playbackScene = createPlaybackScene(playbackCanvas);
 }
 
 function startPlayback() {
-    if (playbackAnimationId) {
-        cancelAnimationFrame(playbackAnimationId);
-    }
-    playbackFrameCounter = 0; // Reset the new counter
+    if (playbackAnimationId) cancelAnimationFrame(playbackAnimationId);
+    playbackFrameCounter = 0;
 
     let frame = 0;
     playButton.disabled = true;
@@ -271,7 +252,6 @@ function startPlayback() {
             return; 
         }
 
-        // Only update on every 2nd frame to slow down playback
         playbackFrameCounter++;
         if (playbackFrameCounter % 2 !== 0) {
             playbackAnimationId = requestAnimationFrame(animate);
@@ -316,17 +296,10 @@ function resetSession() {
     reportView.style.display = 'none';
     startView.style.display = 'block';
     
-    if (playbackAnimationId) {
-        cancelAnimationFrame(playbackAnimationId);
-        playbackAnimationId = null;
-    }
+    if (playbackAnimationId) cancelAnimationFrame(playbackAnimationId);
+    if (sessionStopTimeoutId) clearTimeout(sessionStopTimeoutId);
     
-    if (sessionStopTimeoutId) {
-        clearTimeout(sessionStopTimeoutId);
-        sessionStopTimeoutId = null;
-    }
     isStoppingSession = false;
-    
     resetPoseStats();
 
     recordedLandmarks = [];
@@ -339,6 +312,19 @@ function resetSession() {
         hipChartInstance = null;
     }
     
+    // Reset score UI
+    const scoreCircle = document.querySelector('.score-circle');
+    if (scoreCircle) scoreCircle.style.setProperty('--p', 0);
+    document.getElementById('report-score-value').innerText = '0';
+    document.getElementById('breakdown-score-depth').innerText = '0/30';
+    document.getElementById('breakdown-desc-depth').innerText = '';
+    document.getElementById('breakdown-score-symmetry').innerText = '0/30';
+    document.getElementById('breakdown-desc-symmetry').innerText = '';
+    document.getElementById('breakdown-score-valgus').innerText = '0/20';
+    document.getElementById('breakdown-desc-valgus').innerText = '';
+    document.getElementById('breakdown-score-consistency').innerText = '0/20';
+    document.getElementById('breakdown-desc-consistency').innerText = '';
+
     playButton.disabled = false;
     playButton.innerText = "Play 3D Reps";
 
@@ -348,24 +334,68 @@ function resetSession() {
     document.getElementById('symmetry').innerText = 'N/A';
 }
 
+function updateBreakdown(metric, score, weight, value) {
+    const scoreEl = document.getElementById(`breakdown-score-${metric}`);
+    const descEl = document.getElementById(`breakdown-desc-${metric}`);
+    
+    scoreEl.innerText = `${Math.round(score)}/${weight}`;
+    
+    let description = '';
+    
+    switch (metric) {
+        case 'depth':
+            if (score > weight * 0.85) {
+                description = `Excellent depth! Your average angle of ${value.toFixed(0)}° shows great range of motion. Keep it up.`;
+            } else if (score > weight * 0.6) {
+                description = `Good depth. You're reaching an average of ${value.toFixed(0)}°. How to improve: Try to go a little lower to fully engage your muscles.`;
+            } else {
+                description = `Your depth of ${value.toFixed(0)}° is shallow. How to improve: Focus on lowering your hips until they are parallel with your knees.`;
+            }
+            break;
+        case 'symmetry':
+            if (score > weight * 0.85) {
+                description = `Great balance, with an average symmetry of ${value.toFixed(0)}%. Your weight seems evenly distributed.`;
+            } else if (score > weight * 0.6) {
+                description = `Good symmetry (${value.toFixed(0)}%). How to improve: There's a slight imbalance. Focus on keeping pressure even across both feet.`;
+            } else {
+                description = `There's a noticeable imbalance (${value.toFixed(0)}%). How to improve: You may be favoring one side. Try to push the ground away evenly with both legs.`;
+            }
+            break;
+        case 'valgus':
+            if (value === 0) {
+                description = `Perfect! Your knees remained stable and did not cave inwards on any rep.`;
+            } else if (value <= 2) {
+                description = `Good stability, but your knees caved in on ${value} rep(s). How to improve: Focus on actively pushing your knees outwards as you stand up.`;
+            } else {
+                description = `Your knees caved in on ${value} reps, increasing injury risk. How to improve: Actively push your knees out, especially when tired. Consider using a resistance band around your knees.`;
+            }
+            break;
+        case 'consistency':
+             if (score > weight * 0.85) {
+                description = `Excellent consistency. You maintained solid form across all repetitions.`;
+            } else if (score > weight * 0.6) {
+                description = `Good job. There were some minor variations in your form. How to improve: Aim for every rep to look and feel exactly the same.`;
+            } else {
+                description = `Your form was inconsistent. This can happen when fatigue sets in. How to improve: Focus on controlling the movement, not just completing the reps.`;
+            }
+            break;
+    }
+    descEl.innerText = description;
+}
+
 function generateReport() {
     const { repHistory } = getPoseStats();
     if (repHistory.length === 0) return;
 
-    let firstSquatStartFrame = 0;
-    for (let i = 0; i < recordedPoseLandmarks.length; i++) {
-        const landmarks = recordedPoseLandmarks[i];
-        if (!landmarks) continue;
+    // Trim video/data to start just before the first squat
+    let firstSquatStartFrame = recordedPoseLandmarks.findIndex(landmarks => {
+        if (!landmarks) return false;
         const { left, right } = getLandmarkProxy(landmarks);
-        if (left.knee.visibility > KNEE_VISIBILITY_THRESHOLD && right.knee.visibility > KNEE_VISIBILITY_THRESHOLD) {
-            const leftKneeAngle = calculateAngle(left.hip, left.knee, left.ankle);
-            const rightKneeAngle = calculateAngle(right.hip, right.knee, right.ankle);
-            if (leftKneeAngle < SQUAT_THRESHOLD && rightKneeAngle < SQUAT_THRESHOLD) {
-                firstSquatStartFrame = i;
-                break;
-            }
-        }
-    }
+        return calculateAngle(left.hip, left.knee, left.ankle) < SQUAT_THRESHOLD &&
+               calculateAngle(right.hip, right.knee, right.ankle) < SQUAT_THRESHOLD;
+    });
+    if (firstSquatStartFrame === -1) firstSquatStartFrame = 0;
+
     const playbackStartFrame = Math.max(0, firstSquatStartFrame - PLAYBACK_FPS);
     if (playbackStartFrame > 0) {
         recordedLandmarks = recordedLandmarks.slice(playbackStartFrame);
@@ -374,47 +404,54 @@ function generateReport() {
         symmetryData = symmetryData.slice(playbackStartFrame);
     }
 
-    const avgDepth = repHistory.reduce((s, r) => s + r.depth, 0) / repHistory.length;
-    
-    // --- MODIFICATION START ---
-    // Filter out null/undefined values from the graph data before averaging.
+    // --- SCORE CALCULATION ---
+    const weights = { depth: 30, symmetry: 30, valgus: 20, consistency: 20 };
+    const SQUAT_IDEAL_DEPTH = 90; // Ideal depth in degrees
+
+    // 1. Depth Score
+    const avgDepthAngle = repHistory.reduce((s, r) => s + r.depth, 0) / repHistory.length;
+    const depthProgress = (SQUAT_THRESHOLD - avgDepthAngle) / (SQUAT_THRESHOLD - SQUAT_IDEAL_DEPTH);
+    const depthScore = Math.max(0, Math.min(1, depthProgress)) * weights.depth;
+
+    // 2. Symmetry Score
     const validSymmetryData = symmetryData.filter(s => s !== null && s !== undefined);
-    // Calculate the average of the graphed symmetry percentage values.
-    const avgSymmetry = validSymmetryData.length > 0
-        ? validSymmetryData.reduce((s, v) => s + v, 0) / validSymmetryData.length
-        : 0;
-    // --- MODIFICATION END ---
-    
+    const avgSymmetryPercent = validSymmetryData.length > 0 ? validSymmetryData.reduce((s, v) => s + v, 0) / validSymmetryData.length : 0;
+    const symmetryScore = (avgSymmetryPercent / 100) * weights.symmetry;
+
+    // 3. Knee Valgus Score
     const valgusCount = repHistory.filter(r => r.kneeValgus).length;
+    const valgusPenalty = (valgusCount / SQUAT_TARGET) * weights.valgus;
+    const valgusScore = Math.max(0, weights.valgus - valgusPenalty);
+
+    // 4. Consistency Score
     const qualityScores = { "GOOD": 3, "OK": 2, "BAD": 1 };
     const avgQuality = repHistory.reduce((s, r) => s + qualityScores[r.quality], 0) / repHistory.length;
-    const overallQuality = avgQuality > 2.5 ? "Excellent" : avgQuality > 1.5 ? "Good" : "Needs Work";
-    document.getElementById('report-quality-overall').innerText = overallQuality;
-    document.getElementById('report-depth-avg').innerText = `${avgDepth.toFixed(0)}°`;
+    const consistencyScore = (avgQuality / 3) * weights.consistency;
     
-    // --- MODIFICATION ---
-    // Update the text to display the new average as a percentage.
-    document.getElementById('report-symmetry-avg').innerText = `${avgSymmetry.toFixed(0)}%`;
-    // --- MODIFICATION END ---
-    
-    document.getElementById('report-valgus-count').innerText = `${valgusCount} of ${SQUAT_TARGET} reps`;
-    
-    const firstValidHipHeight = hipHeightData.find(h => h !== null);
-    if (firstValidHipHeight !== undefined) {
-        const firstValidIndex = hipHeightData.indexOf(firstValidHipHeight);
-        for (let i = 0; i < firstValidIndex; i++) hipHeightData[i] = firstValidHipHeight;
-    }
-    const firstValidSymmetry = symmetryData.find(s => s !== null);
-    if (firstValidSymmetry !== undefined) {
-        const firstValidIndex = symmetryData.indexOf(firstValidSymmetry);
-        for (let i = 0; i < firstValidIndex; i++) symmetryData[i] = firstValidSymmetry;
-    }
+    // Total Score
+    const totalScore = Math.round(depthScore + symmetryScore + valgusScore + consistencyScore);
 
-    if (hipChartInstance) {
-        hipChartInstance.destroy();
-    }
+    // --- UPDATE UI ---
+    const scoreCircle = document.querySelector('.score-circle');
+    const scoreValueEl = document.getElementById('report-score-value');
+    setTimeout(() => { // Timeout allows the animation to be seen
+        scoreCircle.style.setProperty('--p', totalScore);
+    }, 100);
+    scoreValueEl.innerText = totalScore;
     
+    document.getElementById('report-quality-overall').innerText = totalScore > 85 ? "Excellent" : totalScore > 65 ? "Good" : "Needs Work";
+    document.getElementById('report-depth-avg').innerText = `${avgDepthAngle.toFixed(0)}°`;
+    document.getElementById('report-symmetry-avg').innerText = `${avgSymmetryPercent.toFixed(0)}%`;
+    document.getElementById('report-valgus-count').innerText = `${valgusCount} of ${SQUAT_TARGET} reps`;
+
+    updateBreakdown('depth', depthScore, weights.depth, avgDepthAngle);
+    updateBreakdown('symmetry', symmetryScore, weights.symmetry, avgSymmetryPercent);
+    updateBreakdown('valgus', valgusScore, weights.valgus, valgusCount);
+    updateBreakdown('consistency', consistencyScore, weights.consistency, avgQuality);
+    
+    // --- Chart ---
     const hipHeightChartCanvas = document.getElementById('hipHeightChart');
+    if (hipChartInstance) hipChartInstance.destroy();
     hipChartInstance = renderHipHeightChart(hipHeightChartCanvas, [], []);
 }
 
@@ -424,7 +461,5 @@ resetButton.addEventListener('click', resetSession);
 playButton.addEventListener('click', startPlayback);
 videoUploadInput.addEventListener('change', (event) => {
     const file = event.target.files[0];
-    if (file) {
-        startUploadSession(file);
-    }
+    if (file) startUploadSession(file);
 });

@@ -68,31 +68,76 @@
         <div id="reportView" style="display: none;">
             <div class="card">
                 <h2>Session Report</h2>
-                <div class="report-content">
-                    <div class="report-stats">
-                        <div class="report-grid">
-                            <div><strong>Overall Quality:</strong> <span id="report-quality-overall"></span></div>
-                            <div><strong>Average Depth:</strong> <span id="report-depth-avg"></span></div>
-                            <div><strong>Average Symmetry:</strong> <span id="report-symmetry-avg"></span></div>
-                            <div><strong>Knee Valgus Warnings:</strong> <span id="report-valgus-count"></span></div>
+                <div class="report-layout-grid">
+                    <div class="report-col-main">
+                        <div class="report-summary">
+                            <div class="score-container">
+                                <div class="score-circle" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                                    <span id="report-score-value">0</span>
+                                </div>
+                                <div class="score-label">Overall Score</div>
+                            </div>
+                            <div class="report-stats">
+                                <div class="report-grid">
+                                    <div><strong>Overall Quality:</strong> <span id="report-quality-overall"></span></div>
+                                    <div><strong>Average Depth:</strong> <span id="report-depth-avg"></span></div>
+                                    <div><strong>Average Symmetry:</strong> <span id="report-symmetry-avg"></span></div>
+                                    <div><strong>Knee Valgus:</strong> <span id="report-valgus-count"></span></div>
+                                </div>
+                            </div>
                         </div>
-                        <p>Review your form in the 3D playback, download the recording, or try again.</p>
-                        <div class="button-group">
-                             <button id="playButton">Play 3D Reps</button>
-                            <a id="downloadButton" class="button" download="squat_session.webm">Download Video</a>
+                        <div class="report-breakdown">
+                            <h3>Score Breakdown & How to Improve</h3>
+                            <div class="breakdown-item">
+                                <div class="breakdown-header">
+                                    <h4><span class="breakdown-dot depth"></span>Depth</h4>
+                                    <span id="breakdown-score-depth">0/30</span>
+                                </div>
+                                <p id="breakdown-desc-depth"></p>
+                            </div>
+                            <div class="breakdown-item">
+                                <div class="breakdown-header">
+                                    <h4><span class="breakdown-dot symmetry"></span>Symmetry</h4>
+                                    <span id="breakdown-score-symmetry">0/30</span>
+                                </div>
+                                <p id="breakdown-desc-symmetry"></p>
+                            </div>
+                            <div class="breakdown-item">
+                                <div class="breakdown-header">
+                                    <h4><span class="breakdown-dot valgus"></span>Knee Stability</h4>
+                                    <span id="breakdown-score-valgus">0/20</span>
+                                </div>
+                                <p id="breakdown-desc-valgus"></p>
+                            </div>
+                            <div class="breakdown-item">
+                                <div class="breakdown-header">
+                                    <h4><span class="breakdown-dot consistency"></span>Consistency</h4>
+                                    <span id="breakdown-score-consistency">0/20</span>
+                                </div>
+                                <p id="breakdown-desc-consistency"></p>
+                            </div>
                         </div>
                     </div>
-                    <div class="playback-container">
-                        <canvas id="playbackCanvas"></canvas>
-                         <p class="playback-text">3D PLAYBACK</p>
+
+                    <div class="report-col-visuals">
+                        <div class="playback-container">
+                            <canvas id="playbackCanvas"></canvas>
+                             <p class="playback-text">3D PLAYBACK</p>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="hipHeightChart"></canvas>
+                        </div>
                     </div>
-                </div>
-                
-                <div class="chart-container">
-                    <canvas id="hipHeightChart"></canvas>
                 </div>
 
-                <button id="resetButton">Go Again</button>
+                <div class="report-footer">
+                    <p>Use the 3D playback and chart to analyze your form, download the recording, or try another set.</p>
+                    <div class="button-group">
+                        <button id="playButton">Play 3D Reps</button>
+                        <a id="downloadButton" class="button" download="squat_session.webm">Download Video</a>
+                        <button id="resetButton">Go Again</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
