@@ -230,17 +230,23 @@ function stopSession() {
     if (!isProcessingUpload && mediaRecorder?.state === 'recording') mediaRecorder.stop();
     if (!isProcessingUpload) camera.stop();
 
+    // MODIFIED: Create the playback scene FIRST, before generating the report
+    // that will try to draw to it.
+    if (!playbackScene) {
+        playbackScene = createPlaybackScene(playbackCanvas);
+    }
+
     videoElement.style.display = 'none';
     sessionView.style.display = 'none';
     reportView.style.display = 'block';
 
     generateReport();
-    if (!playbackScene) playbackScene = createPlaybackScene(playbackCanvas);
 }
 
 // MODIFIED: Function to update the playback state (3D scene, slider, chart)
 function updatePlaybackFrame(frame) {
-    if (!recordedWorldLandmarks[frame] || !hipChartInstance) return;
+    // MODIFICATION: Check for playbackScene existence before using it.
+    if (!playbackScene || !recordedWorldLandmarks[frame] || !hipChartInstance) return;
 
     // Update 3D Scene
     const currentRep = finalRepHistory.find(rep => {
@@ -598,6 +604,9 @@ function generateReport() {
     hipHeightChartCanvas.addEventListener('mouseup', stopDragging);
     hipHeightChartCanvas.addEventListener('mouseleave', stopDragging);
     // --- END ADDED ---
+
+    // Show the first frame of the 3D playback immediately.
+    updatePlaybackFrame(0);
 }
 
 // --- Event Listeners ---

@@ -39,16 +39,17 @@ class PoseScene {
     _init() {
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x1a1a1a);
-        this.camera = new THREE.PerspectiveCamera(75, this.canvas.clientWidth / this.canvas.clientHeight, 0.1, 1000);
-        this.camera.position.set(0, 1.5, 2.5);
-        this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
-        this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
         
-        // Add OrbitControls
+        // Initial setup with default aspect ratio, will be corrected by ResizeObserver
+        this.camera = new THREE.PerspectiveCamera(75, 16 / 9, 0.1, 1000);
+        this.camera.position.set(0, 1.5, 2.5);
+        
+        this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
+        
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-        this.controls.enableDamping = true; // Makes the controls feel smoother
+        this.controls.enableDamping = true; 
         this.controls.dampingFactor = 0.05;
-        this.controls.target.set(0, 1, 0); // Initial focus point
+        this.controls.target.set(0, 1, 0); 
 
         this.scene.add(new THREE.DirectionalLight(0xffffff, 0.8));
         this.scene.add(new THREE.AmbientLight(0x404040, 2));
@@ -59,9 +60,21 @@ class PoseScene {
 
         this._createSkeleton();
 
+        // MODIFIED: Use a ResizeObserver to handle the canvas appearing/resizing
+        const resizeObserver = new ResizeObserver(entries => {
+            if (entries && entries.length > 0) {
+                const { width, height } = entries[0].contentRect;
+                if (width > 0 && height > 0) {
+                    this.camera.aspect = width / height;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(width, height);
+                }
+            }
+        });
+        resizeObserver.observe(this.canvas);
+
         const animate = () => {
             requestAnimationFrame(animate);
-            // Update controls in the animation loop
             this.controls.update(); 
             this.renderer.render(this.scene, this.camera);
         };
@@ -139,7 +152,6 @@ class PoseScene {
         if (leftHip.visible && rightHip.visible) {
             const hipCenter = new THREE.Vector3().addVectors(leftHip.position, rightHip.position).multiplyScalar(0.5);
             hipCenter.y += this.skeletonGroup.position.y;
-            // Update the controls' target instead of using camera.lookAt
             this.controls.target.copy(hipCenter);
         }
     }
@@ -167,7 +179,6 @@ class PoseScene {
 }
 
 export function createLiveScene(canvas) {
-    // Note: The 'autoRotate' option is no longer used by our custom logic
     return new PoseScene(canvas, { autoRotate: false });
 }
 
