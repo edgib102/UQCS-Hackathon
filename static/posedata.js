@@ -79,3 +79,7 @@ function calculateAngle(a, b, c) {
   const clamped = Math.max(-1, Math.min(1, cosAngle));
   return Math.acos(clamped) * (180 / Math.PI);
 }
+
+export function getPoseStats() {
+    return { repCount, squatDepthReached };
+}

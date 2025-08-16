@@ -1,4 +1,4 @@
-import { updatePoseData, getPoseStats } from "./posedata.js";
+import { updatePose, repCount, squatDepthReached, getPoseStats } from "./posedata.js";
 import { init3DScene, updateSkeleton } from "./pose3d.js";
 
 // --- DOM Elements ---
@@ -45,7 +45,7 @@ function onResults(results) {
         
         // --- Pose Analysis ---
         // Process landmarks to count squats
-        updatePoseData(results);
+        updatePose(results);
         const { repCount, squatDepthReached } = getPoseStats();
 
         // --- UI Update ---
