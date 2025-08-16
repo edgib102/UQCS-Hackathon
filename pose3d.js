@@ -5,20 +5,23 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 
-// --- Configuration for the Skeleton ---
+// --- VISUAL ENHANCEMENT: Softer, more professional color palette ---
 const CONNECTIONS = [
     [11, 13], [13, 15], [23, 25], [25, 27], [27, 29], [29, 31], [11, 23],
     [12, 14], [14, 16], [24, 26], [26, 28], [28, 30], [30, 32], [12, 24],
     [11, 12], [23, 24]
 ];
 const LANDMARK_COLORS = {
-    LEFT: new THREE.Color(0x00CFFF),
-    RIGHT: new THREE.Color(0xFF9E00),
-    CENTER: new THREE.Color(0xe0e0e0)
+    LEFT: new THREE.Color(0x6495ED), // Cornflower Blue
+    RIGHT: new THREE.Color(0xFFB347), // Apricot Orange
+    CENTER: new THREE.Color(0xD3D3D3) // Light Gray
 };
 const LEFT_INDICES = [11, 13, 15, 23, 25, 27, 29, 31];
 const RIGHT_INDICES = [12, 14, 16, 24, 26, 28, 30, 32];
 const FOOT_INDICES = [29, 30, 31, 32];
+// --- HEAD CIRCLE: Define head landmark indices ---
+const HEAD_INDICES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
 
 const LEG_CONNECTIONS = [
     [23, 25], [25, 27], // Left Leg
@@ -32,7 +35,24 @@ class PoseScene {
         this.options = { autoRotate: false, ...options };
         this.jointSpheres = [];
         this.boneLines = [];
-        this.controls = null; // Property to hold OrbitControls instance
+        this.controls = null;
+
+        this.deviationVectorL = null;
+        this.deviationVectorR = null;
+        this.comIndicator = null;
+        this.comPlumbLine = null;
+        this.depthLaser = null;
+        this.headCircle = null;
+        // --- HEAD ROTATION: Add a helper object to calculate orientation ---
+        this.headOrientationHelper = new THREE.Object3D();
+
+        this.depthLaserMaterial = new THREE.MeshBasicMaterial({
+            color: 0xff0000,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.2
+        });
+        
         this._init();
     }
 
@@ -40,27 +60,42 @@ class PoseScene {
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x1a1a1a);
         
-        // Initial setup with default aspect ratio, will be corrected by ResizeObserver
         this.camera = new THREE.PerspectiveCamera(75, 16 / 9, 0.1, 1000);
-        this.camera.position.set(0, 1.5, 2.5);
+        this.camera.position.set(0.5, 1.8, 3.0);
         
         this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.controls.enableDamping = true; 
-        this.controls.dampingFactor = 0.05;
+        this.controls.dampingFactor = 0.08;
         this.controls.target.set(0, 1, 0); 
 
-        this.scene.add(new THREE.DirectionalLight(0xffffff, 0.8));
-        this.scene.add(new THREE.AmbientLight(0x404040, 2));
-        this.scene.add(new THREE.GridHelper(5, 10, 0x888888, 0x444444));
+        this.scene.add(new THREE.HemisphereLight(0x888888, 0x444444, 1.5));
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        directionalLight.position.set(2, 5, 3);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 1024;
+        directionalLight.shadow.mapSize.height = 1024;
+        this.scene.add(directionalLight);
+        
+        const floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(10, 10),
+            new THREE.MeshPhongMaterial({ color: 0x333333, depthWrite: false })
+        );
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        this.scene.add(floor);
+        this.scene.add(new THREE.GridHelper(10, 20, 0x555555, 0x555555));
+
 
         this.skeletonGroup = new THREE.Group();
         this.scene.add(this.skeletonGroup);
 
         this._createSkeleton();
+        this._createVisualHelpers();
 
-        // MODIFIED: Use a ResizeObserver to handle the canvas appearing/resizing
         const resizeObserver = new ResizeObserver(entries => {
             if (entries && entries.length > 0) {
                 const { width, height } = entries[0].contentRect;
@@ -75,6 +110,7 @@ class PoseScene {
 
         const animate = () => {
             requestAnimationFrame(animate);
+            // --- HEAD ROTATION: Removed logic that forces circle to face camera ---
             this.controls.update(); 
             this.renderer.render(this.scene, this.camera);
         };
@@ -82,12 +118,15 @@ class PoseScene {
     }
 
     _createSkeleton() {
-        const sphereGeo = new THREE.SphereGeometry(0.025, 8, 8);
+        const sphereGeo = new THREE.SphereGeometry(0.025, 16, 12);
         for (let i = 0; i < 33; i++) {
             let color = LANDMARK_COLORS.CENTER;
             if (LEFT_INDICES.includes(i)) color = LANDMARK_COLORS.LEFT;
             else if (RIGHT_INDICES.includes(i)) color = LANDMARK_COLORS.RIGHT;
-            const sphere = new THREE.Mesh(sphereGeo, new THREE.MeshStandardMaterial({ color }));
+            
+            const material = new THREE.MeshPhongMaterial({ color, shininess: 30 });
+            const sphere = new THREE.Mesh(sphereGeo, material);
+            sphere.castShadow = true;
             this.jointSpheres.push(sphere);
             this.skeletonGroup.add(sphere);
         }
@@ -100,9 +139,9 @@ class PoseScene {
             if (isShoulderLine || isHipLine) {
                 color = LANDMARK_COLORS.CENTER; 
             } else if (LEFT_INDICES.includes(conn[0])) { 
-                color = LANDMARK_COLORS.LEFT;
+                color = LANDMARK_COLORS.LEFT.clone().multiplyScalar(0.7);
             } else if (RIGHT_INDICES.includes(conn[0])) { 
-                color = LANDMARK_COLORS.RIGHT;
+                color = LANDMARK_COLORS.RIGHT.clone().multiplyScalar(0.7);
             } else {
                 color = LANDMARK_COLORS.CENTER; 
             }
@@ -113,16 +152,61 @@ class PoseScene {
         });
     }
 
-    update(landmarks) {
+    _createVisualHelpers() {
+        const errorMaterial = new THREE.LineBasicMaterial({ color: 0xFF4136, linewidth: 4 });
+        this.deviationVectorL = new THREE.Line(new THREE.BufferGeometry(), errorMaterial);
+        this.deviationVectorR = new THREE.Line(new THREE.BufferGeometry(), errorMaterial);
+        this.deviationVectorL.visible = false;
+        this.deviationVectorR.visible = false;
+        this.skeletonGroup.add(this.deviationVectorL, this.deviationVectorR);
+        
+        const comMaterial = new THREE.MeshPhongMaterial({ color: 0x39CCCC, shininess: 50 });
+        this.comIndicator = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 16), comMaterial);
+        this.comIndicator.castShadow = true;
+        this.comIndicator.visible = false;
+        this.skeletonGroup.add(this.comIndicator);
+
+        const plumbLineMaterial = new THREE.LineBasicMaterial({ color: 0x39CCCC, transparent: true, opacity: 0.5 });
+        this.comPlumbLine = new THREE.Line(new THREE.BufferGeometry(), plumbLineMaterial);
+        this.comPlumbLine.visible = false;
+        this.skeletonGroup.add(this.comPlumbLine);
+        
+        const laserGeometry = new THREE.PlaneGeometry(2, 2);
+        this.depthLaser = new THREE.Mesh(laserGeometry, this.depthLaserMaterial);
+        this.depthLaser.rotation.x = -Math.PI / 2;
+        this.depthLaser.visible = false;
+        this.skeletonGroup.add(this.depthLaser);
+
+        const headGeometry = new THREE.TorusGeometry(0.1, 0.015, 12, 24);
+        const headMaterial = new THREE.MeshPhongMaterial({ 
+            color: LANDMARK_COLORS.CENTER, 
+            shininess: 30
+        });
+        this.headCircle = new THREE.Mesh(headGeometry, headMaterial);
+        this.headCircle.castShadow = true;
+        this.headCircle.visible = false;
+        this.skeletonGroup.add(this.headCircle);
+    }
+
+    update(landmarks, formState = {}) {
         if (!landmarks || this.jointSpheres.length === 0) return;
 
         let lowestY = Infinity;
+        const leftEar = this.jointSpheres[7];
+        const rightEar = this.jointSpheres[8];
+        const nose = this.jointSpheres[0];
 
         landmarks.forEach((lm, i) => {
             const joint = this.jointSpheres[i];
             if (lm) {
                 joint.position.set(-lm.x, -lm.y, -lm.z);
-                joint.visible = lm.visibility > 0.5;
+                
+                if (HEAD_INDICES.includes(i)) {
+                    joint.visible = false;
+                } else {
+                    joint.visible = lm.visibility > 0.5;
+                }
+
                 if (FOOT_INDICES.includes(i) && joint.visible && joint.position.y < lowestY) {
                     lowestY = joint.position.y;
                 }
@@ -130,6 +214,32 @@ class PoseScene {
                 joint.visible = false;
             }
         });
+
+        // --- POSITIONING FIX: Adjust head ring position to be more central ---
+        const leftEarVisible = landmarks[7] && landmarks[7].visibility > 0.5;
+        const rightEarVisible = landmarks[8] && landmarks[8].visibility > 0.5;
+        const noseVisible = landmarks[0] && landmarks[0].visibility > 0.5;
+
+        if (this.headCircle && leftEarVisible && rightEarVisible && noseVisible) {
+            this.headCircle.visible = true;
+            
+            // Calculate a more central point for the head
+            const earMidpoint = new THREE.Vector3().addVectors(leftEar.position, rightEar.position).multiplyScalar(0.5);
+            // Interpolate 40% of the way from the ears to the nose to find a better center
+            const headCenter = new THREE.Vector3().lerpVectors(earMidpoint, nose.position, 0.4);
+            
+            // Set the ring's position to this new center
+            this.headCircle.position.copy(headCenter);
+            
+            // Use the helper to compute the rotation based on the new center and nose
+            this.headOrientationHelper.position.copy(headCenter);
+            this.headOrientationHelper.lookAt(nose.position);
+            
+            // Apply the computed rotation to the head ring
+            this.headCircle.quaternion.copy(this.headOrientationHelper.quaternion);
+        } else if (this.headCircle) {
+            this.headCircle.visible = false;
+        }
 
         CONNECTIONS.forEach((conn, idx) => {
             const start = landmarks[conn[0]];
@@ -154,27 +264,53 @@ class PoseScene {
             hipCenter.y += this.skeletonGroup.position.y;
             this.controls.target.copy(hipCenter);
         }
+
+        this.updateVisualizations(formState);
     }
     
-    updateColors(hasKneeValgus) {
-        const valgusColor = new THREE.Color(0xFF4136);
-        
-        CONNECTIONS.forEach((conn, idx) => {
-            const line = this.boneLines[idx];
-            const connKey = JSON.stringify(conn.slice().sort());
-
-            if (legConnectionSet.has(connKey)) {
-                let originalColor;
-                if (LEFT_INDICES.includes(conn[0])) {
-                    originalColor = LANDMARK_COLORS.LEFT;
-                } else if (RIGHT_INDICES.includes(conn[0])) {
-                    originalColor = LANDMARK_COLORS.RIGHT;
-                } else {
-                    originalColor = LANDMARK_COLORS.CENTER;
-                }
-                line.material.color.set(hasKneeValgus ? valgusColor : originalColor);
+    updateVisualizations(formState) {
+        const { valgus, balance, depth } = formState;
+        if (valgus) {
+            this.deviationVectorL.visible = valgus.left?.hasError;
+            if (valgus.left?.hasError && valgus.left.idealPoint) {
+                const kneeL = this.jointSpheres[25].position;
+                const idealL = new THREE.Vector3(-valgus.left.idealPoint.x, -valgus.left.idealPoint.y, -valgus.left.idealPoint.z);
+                this.deviationVectorL.geometry.setFromPoints([kneeL, idealL]);
             }
-        });
+            this.deviationVectorR.visible = valgus.right?.hasError;
+            if (valgus.right?.hasError && valgus.right.idealPoint) {
+                const kneeR = this.jointSpheres[26].position;
+                const idealR = new THREE.Vector3(-valgus.right.idealPoint.x, -valgus.right.idealPoint.y, -valgus.right.idealPoint.z);
+                this.deviationVectorR.geometry.setFromPoints([kneeR, idealR]);
+            }
+        } else {
+             this.deviationVectorL.visible = false;
+             this.deviationVectorR.visible = false;
+        }
+
+        if (balance?.centerOfMass) {
+            this.comIndicator.visible = true;
+            this.comPlumbLine.visible = true;
+            const com = balance.centerOfMass;
+            const comPosition = new THREE.Vector3(-com.x, -com.y, -com.z);
+            this.comIndicator.position.copy(comPosition);
+
+            const floorY = -this.skeletonGroup.position.y;
+            const floorPoint = new THREE.Vector3(comPosition.x, floorY, comPosition.z);
+            this.comPlumbLine.geometry.setFromPoints([comPosition, floorPoint]);
+        } else {
+            this.comIndicator.visible = false;
+            this.comPlumbLine.visible = false;
+        }
+
+        if (depth?.kneeY !== null) {
+            this.depthLaser.visible = true;
+            this.depthLaser.position.y = -depth.kneeY;
+            this.depthLaserMaterial.color.set(depth.isParallel ? 0xff0000 : 0x00ff00);
+            this.depthLaserMaterial.opacity = depth.isParallel ? 0.2 : 0.35;
+        } else {
+            this.depthLaser.visible = false;
+        }
     }
 }
 

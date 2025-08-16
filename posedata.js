@@ -1,4 +1,4 @@
-// posedata.js - Improved for webcam accuracy
+// posedata.js - Improved for webcam accuracy and advanced visualization data
 
 export const SQUAT_THRESHOLD = 110;
 export const KNEE_VISIBILITY_THRESHOLD = 0.8;
@@ -16,6 +16,12 @@ const vec3 = {
         if (mag < 1e-6) return { x: 0, y: 0, z: 0 };
         return { x: a.x / mag, y: a.y / mag, z: a.z / mag };
     },
+    // --- NEW --- Vector projection utility
+    project: (a, b) => { // Project vector a onto vector b
+        const b_normalized = vec3.normalize(b);
+        const magnitude = vec3.dot(a, b_normalized);
+        return vec3.scale(b_normalized, magnitude);
+    }
 };
 
 // ---- Helper Functions ----
@@ -102,14 +108,14 @@ export function calculateValgusState(screenLandmarks, worldLandmarks) {
     };
 }
 
-// --- Simplified function for LIVE feedback ONLY ---
+
+// --- DEPRECATED --- This function is replaced by getLiveFormState
 export function getLivePoseStats(filteredLandmarks, filteredWorldLandmarks) {
     if (!filteredLandmarks) return { liveDepth: null, liveSymmetry: null, kneeValgus: false };
 
     const lmProxy = getLandmarkProxy(filteredLandmarks);
     const valgusState = calculateValgusState(filteredLandmarks, filteredWorldLandmarks);
     
-    // Balanced valgus threshold for live feedback - detectable but not overly sensitive
     const kneeValgus = valgusState.confidence > 0.6 && (valgusState.left > 0.08 || valgusState.right > 0.08);
 
     if (!lmProxy) return { liveDepth: null, liveSymmetry: null, kneeValgus };
@@ -122,6 +128,80 @@ export function getLivePoseStats(filteredLandmarks, filteredWorldLandmarks) {
         liveSymmetry = Math.abs(leftKneeAngle - rightKneeAngle);
     }
     return { liveDepth, liveSymmetry, kneeValgus };
+}
+
+// --- NEW --- Master function for real-time analysis for 3D visualization
+export function getLiveFormState(screenLandmarks, worldLandmarks) {
+    const defaultState = {
+        stats: { liveDepth: null, liveSymmetry: null, kneeValgus: false },
+        valgus: { left: { hasError: false, idealPoint: null }, right: { hasError: false, idealPoint: null } },
+        balance: { centerOfMass: null },
+        depth: { hipY: null, kneeY: null, isParallel: false }
+    };
+    if (!screenLandmarks || !worldLandmarks) return defaultState;
+
+    const screenProxy = getLandmarkProxy(screenLandmarks);
+    const worldProxy = getLandmarkProxy(worldLandmarks);
+    const valgusState = calculateValgusState(screenLandmarks, worldLandmarks);
+    
+    // --- Basic Stats (for text display) ---
+    const kneeValgus = valgusState.confidence > 0.7 && (valgusState.left > 0.08 || valgusState.right > 0.08);
+    let liveDepth = null, liveSymmetry = null;
+    if (screenProxy) {
+        const leftKneeAngle = calculateAngle(screenProxy.left.hip, screenProxy.left.knee, screenProxy.left.ankle);
+        const rightKneeAngle = calculateAngle(screenProxy.right.hip, screenProxy.right.knee, screenProxy.right.ankle);
+        if (leftKneeAngle && rightKneeAngle) {
+            liveDepth = (leftKneeAngle + rightKneeAngle) / 2;
+            liveSymmetry = Math.abs(leftKneeAngle - rightKneeAngle);
+        }
+    }
+    
+    const formState = {
+        stats: { liveDepth, liveSymmetry, kneeValgus },
+        valgus: { ...defaultState.valgus },
+        balance: { ...defaultState.balance },
+        depth: { ...defaultState.depth }
+    };
+
+    // --- Advanced Visualization Data ---
+    if (worldProxy) {
+        // Valgus Deviation Vector Data
+        const { left: wl, right: wr } = worldProxy;
+        const hipAnkleVecL = vec3.subtract(wl.ankle, wl.hip);
+        const hipAnkleVecR = vec3.subtract(wr.ankle, wr.hip);
+
+        if (valgusState.left > 0.08) {
+            formState.valgus.left.hasError = true;
+            const hipKneeVecL = vec3.subtract(wl.knee, wl.hip);
+            const projectionL = vec3.project(hipKneeVecL, hipAnkleVecL);
+            formState.valgus.left.idealPoint = vec3.add(wl.hip, projectionL);
+        }
+        if (valgusState.right > 0.08) {
+            formState.valgus.right.hasError = true;
+            const hipKneeVecR = vec3.subtract(wr.knee, wr.hip);
+            const projectionR = vec3.project(hipKneeVecR, hipAnkleVecR);
+            formState.valgus.right.idealPoint = vec3.add(wr.hip, projectionR);
+        }
+
+        // Center of Mass Data
+        const lm11 = worldLandmarks[11], lm12 = worldLandmarks[12], lm23 = worldLandmarks[23], lm24 = worldLandmarks[24];
+        if (lm11 && lm12 && lm23 && lm24 && lm11.visibility > 0.5 && lm12.visibility > 0.5 && lm23.visibility > 0.5 && lm24.visibility > 0.5) {
+            formState.balance.centerOfMass = {
+                x: (lm11.x + lm12.x + lm23.x + lm24.x) / 4,
+                y: (lm11.y + lm12.y + lm23.y + lm24.y) / 4,
+                z: (lm11.z + lm12.z + lm23.z + lm24.z) / 4,
+            };
+        }
+
+        // Depth Laser Data
+        if (wl.hip && wl.knee && wr.hip && wr.knee) {
+             formState.depth.hipY = (wl.hip.y + wr.hip.y) / 2;
+             formState.depth.kneeY = (wl.knee.y + wr.knee.y) / 2;
+             formState.depth.isParallel = formState.depth.hipY <= formState.depth.kneeY;
+        }
+    }
+    
+    return formState;
 }
 
 // IMPROVED: Much more lenient rep detection for debugging and real-world use
@@ -313,7 +393,7 @@ export function analyzeSession(allLandmarks, allWorldLandmarks) {
         let maxLeftValgus = 0, maxRightValgus = 0, totalSymmetryDiff = 0, symmetrySamples = 0;
         
         for (let i = startFrame; i <= endFrame; i++) {
-            if (!allLandmarks[i]) continue;
+            if (!allLandmarks[i] || !allWorldLandmarks[i]) continue;
             
             // Try to calculate valgus but don't fail if we can't
             try {

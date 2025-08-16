@@ -1,6 +1,6 @@
 // script.js
 
-import { getLivePoseStats, getLandmarkProxy, calculateAngle, calculateValgusState } from "./posedata.js";
+import { getLiveFormState, getLandmarkProxy, calculateAngle, calculateValgusState } from "./posedata.js";
 import { createLiveScene, createPlaybackScene } from "./pose3d.js";
 import { LandmarkFilter } from "./filter.js";
 import { processAndRenderReport } from "./report.js";
@@ -83,11 +83,17 @@ function onResults(results) {
 
     const filteredLandmarks = results.poseLandmarks?.map((lm, i) => lm ? screenLandmarkFilters[i].filter(lm) : null);
     const filteredWorldLandmarks = results.poseWorldLandmarks?.map((lm, i) => lm ? worldLandmarkFilters[i].filter(lm) : null);
-    const stats = getLivePoseStats(filteredLandmarks, filteredWorldLandmarks);
-    drawFrame({ ...results, poseLandmarks: filteredLandmarks });
+    
+    // --- MODIFIED --- Use the new master analysis function
+    const formState = getLiveFormState(filteredLandmarks, filteredWorldLandmarks);
+    const { stats } = formState;
+
+    // Use a simplified version for the 2D canvas overlay
+    drawFrame({ ...results, poseLandmarks: filteredLandmarks }, stats.kneeValgus);
 
     if (filteredLandmarks && filteredWorldLandmarks) {
-        liveScene.update(filteredWorldLandmarks);
+        // --- MODIFIED --- Pass the full formState to the 3D scene
+        liveScene.update(filteredWorldLandmarks, formState);
         recordedWorldLandmarks.push(JSON.parse(JSON.stringify(filteredWorldLandmarks)));
         recordedPoseLandmarks.push(JSON.parse(JSON.stringify(filteredLandmarks)));
 
@@ -103,17 +109,14 @@ function onResults(results) {
             symmetryData.push(null);
         }
 
-        const valgusState = calculateValgusState(filteredLandmarks, filteredWorldLandmarks);
-        if (valgusState.confidence > 0.5) {
-            const maxValgus = Math.max(valgusState.left, valgusState.right);
+        const valgusStateRaw = calculateValgusState(filteredLandmarks, filteredWorldLandmarks);
+        if (valgusStateRaw.confidence > 0.5) {
+            const maxValgus = Math.max(valgusStateRaw.left, valgusStateRaw.right);
             valgusData.push(100 * Math.max(0, 1 - (maxValgus / 0.24)));
         } else {
             valgusData.push(null);
         }
-
-        document.getElementById('depth').innerText = stats.liveDepth ? `${stats.liveDepth.toFixed(0)}°` : 'N/A';
-        document.getElementById('symmetry').innerText = stats.liveSymmetry ? `${stats.liveSymmetry.toFixed(0)}°` : 'N/A';
-
+        
         const depthEl = document.getElementById('depth');
         const symmetryEl = document.getElementById('symmetry');
         let depthText = 'N/A';
@@ -152,7 +155,8 @@ function onResults(results) {
     }
 }
 
-function drawFrame(results) {
+// --- MODIFIED --- Accepts kneeValgus boolean for simple 2D overlay coloring
+function drawFrame(results, hasKneeValgus) {
     if (loadingElement.style.display !== 'none') {
         loadingElement.style.display = 'none';
         videoElement.style.display = 'block';
@@ -165,8 +169,6 @@ function drawFrame(results) {
 
 
     if (results.poseLandmarks) {
-        const stats = getLivePoseStats(results.poseLandmarks, recordedWorldLandmarks[recordedWorldLandmarks.length-1]);
-
         const legConnections = [[23, 25], [25, 27], [24, 26], [26, 28]]; 
         const valgusColor = '#FF4136'; 
         const defaultColor = '#DDDDDD';
@@ -174,7 +176,7 @@ function drawFrame(results) {
         const nonLegConnections = POSE_CONNECTIONS.filter(c => !legConnections.some(lc => lc.join(',') === c.join(',')));
         drawConnectors(canvasCtx, results.poseLandmarks, nonLegConnections, { color: defaultColor, lineWidth: 4 });
 
-        const legColor = stats.kneeValgus ? valgusColor : defaultColor;
+        const legColor = hasKneeValgus ? valgusColor : defaultColor;
         drawConnectors(canvasCtx, results.poseLandmarks, legConnections, { color: legColor, lineWidth: 6 }); 
 
         drawLandmarks(canvasCtx, results.poseLandmarks, { color: '#00CFFF', lineWidth: 2 });
@@ -280,11 +282,9 @@ function stopSession() {
             const showWorstRepButton = document.getElementById('showWorstRepButton');
             const showBestRepButton = document.getElementById('showBestRepButton');
 
-            // --- NEW --- Define colors for different highlight types
-            const STABILITY_HIGHLIGHT_COLOR = 'rgba(255, 65, 54, 0.25)';  // Semi-transparent Red
-            const DEPTH_HIGHLIGHT_COLOR = 'rgba(57, 204, 204, 0.25)'; // Semi-transparent Cyan
+            const STABILITY_HIGHLIGHT_COLOR = 'rgba(255, 65, 54, 0.25)';
+            const DEPTH_HIGHLIGHT_COLOR = 'rgba(57, 204, 204, 0.25)';
 
-            // MODIFIED: Function to highlight a rep on the chart now accepts a color
             const highlightRepOnChart = (rep, color) => {
                 if (!hipChartInstance || !rep) return;
                 const startFrame = rep.startFrame - playbackOffset;
@@ -293,13 +293,12 @@ function stopSession() {
                 const highlighterOptions = hipChartInstance.options.plugins.repHighlighter;
                 highlighterOptions.startFrame = startFrame;
                 highlighterOptions.endFrame = endFrame;
-                highlighterOptions.color = color; // Set the specific color for the highlight
+                highlighterOptions.color = color;
                 hipChartInstance.update(); 
                 
                 updatePlaybackFrame(Math.max(0, startFrame));
             };
 
-            // MODIFIED: Event listeners now call the highlight function with a specific color
             showWorstRepButton.addEventListener('click', () => {
                 highlightRepOnChart(worstStabRep, STABILITY_HIGHLIGHT_COLOR);
             });
@@ -313,7 +312,6 @@ function stopSession() {
     }
 }
 
-// MODIFIED: Function now also clears the highlight color
 function clearRepHighlight() {
     if (!hipChartInstance) return;
     const highlighterOptions = hipChartInstance.options.plugins.repHighlighter;
@@ -377,12 +375,16 @@ function setupReportInteractivity() {
     hipChartInstance.canvas.addEventListener('mouseleave', stopDragging);
 }
 
+// --- MODIFIED --- This function now also gets and passes formState for playback visualizations
 function updatePlaybackFrame(frame) {
-    if (!playbackScene || !recordedWorldLandmarks[frame] || !hipChartInstance) return;
-    const currentRep = finalRepHistory.find(rep => (frame + playbackOffset) >= rep.startFrame && (frame + playbackOffset) <= rep.endFrame);
-    const hasKneeValgus = currentRep ? (currentRep.maxLeftValgus > 0.08 || currentRep.maxRightValgus > 0.08) : false;
-    playbackScene.update(recordedWorldLandmarks[frame]);
-    playbackScene.updateColors(hasKneeValgus);
+    if (!playbackScene || !recordedWorldLandmarks[frame] || !hipChartInstance || !recordedPoseLandmarks[frame]) return;
+
+    // --- NEW --- Get the form state for the specific frame in the past
+    const formState = getLiveFormState(recordedPoseLandmarks[frame], recordedWorldLandmarks[frame]);
+
+    // --- MODIFIED --- Pass the historical formState to the playback scene
+    playbackScene.update(recordedWorldLandmarks[frame], formState);
+    
     playbackSlider.value = frame;
     hipChartInstance.options.plugins.playbackCursor.frame = frame;
     hipChartInstance.update('none');
@@ -463,8 +465,6 @@ function resetSession() {
     ['depth', 'symmetry'].forEach(stat => document.getElementById(stat).innerText = 'N/A');
 
     document.getElementById('rep-quality').innerText = 'LIVE';
-
-    
 }
 
 // --- Event Listeners ---
