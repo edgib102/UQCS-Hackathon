@@ -3,7 +3,7 @@ import { createLiveScene, createPlaybackScene } from "./pose3d.js";
 import { renderHipHeightChart } from "./chart.js";
 
 // --- Configuration ---
-const SQUAT_TARGET = 5;
+const SQUAT_TARGET = 2;
 
 // --- DOM Elements ---
 const videoElement = document.getElementById('video');
@@ -29,6 +29,7 @@ let hipHeightData = [];
 let hipChartInstance;
 let isSessionRunning = false;
 let liveScene, playbackScene;
+let playbackAnimationId = null; // To control the animation loop
 
 // --- MediaPipe Pose ---
 const pose = new Pose({
@@ -67,18 +68,23 @@ function onResults(results) {
     
     // --- 3. Process Pose Data (if available) ---
     if (results.poseLandmarks) {
-        // Update the 3D scene
+        // We only record a frame if we have the 3D data for playback.
         if (results.poseWorldLandmarks) {
+            // Update the live 3D scene
             liveScene.update(results.poseWorldLandmarks);
+            // Record the 3D landmarks for playback
             recordedLandmarks.push(JSON.parse(JSON.stringify(results.poseWorldLandmarks)));
-        }
 
-        // Get hip height for the chart
-        const leftHip = results.poseLandmarks[23];
-        const rightHip = results.poseLandmarks[24];
-        if (leftHip.visibility > 0.5 && rightHip.visibility > 0.5) {
-            const avgHipY = (leftHip.y + rightHip.y) / 2;
-            hipHeightData.push(avgHipY);
+            // Now, determine the corresponding hip height for this exact recorded frame.
+            const leftHip = results.poseLandmarks[23];
+            const rightHip = results.poseLandmarks[24];
+            if (leftHip.visibility > 0.5 && rightHip.visibility > 0.5) {
+                const avgHipY = (leftHip.y + rightHip.y) / 2;
+                hipHeightData.push(avgHipY);
+            } else {
+                // IMPORTANT: Push null to keep the chart data perfectly synced with the 3D data.
+                hipHeightData.push(null);
+            }
         }
 
         // --- 4. Run Analysis & Update Stats ---
@@ -168,38 +174,77 @@ function stopSession() {
 }
 
 function startPlayback() {
+    if (playbackAnimationId) {
+        cancelAnimationFrame(playbackAnimationId);
+    }
+
     let frame = 0;
-    const animate = () => {
-        if (!isSessionRunning) { // Stop animation if session is reset
-            if (frame >= recordedLandmarks.length) {
-                frame = 0; // Loop the playback
-            }
-            playbackScene.update(recordedLandmarks[frame]);
-            frame++;
-            requestAnimationFrame(animate);
-        }
-    };
-    animate();
     playButton.disabled = true;
     playButton.innerText = "Playing...";
+
+    // Clear the chart's data for a clean start
+    if (hipChartInstance) {
+        hipChartInstance.data.labels = [];
+        hipChartInstance.data.datasets[0].data = [];
+        hipChartInstance.update('none');
+    }
+
+    const animate = () => {
+        // If the user navigates away, stop the animation.
+        if (reportView.style.display === 'none') {
+            playButton.disabled = false;
+            playButton.innerText = "Play 3D Reps";
+            return; 
+        }
+
+        if (frame >= recordedLandmarks.length) {
+            playButton.disabled = false;
+            playButton.innerText = "Replay";
+            return; // End animation
+        }
+
+        // 1. Update the 3D skeleton
+        playbackScene.update(recordedLandmarks[frame]);
+        
+        // 2. Add data to the chart to "draw" the line
+        if (hipChartInstance && frame < hipHeightData.length) {
+            hipChartInstance.data.labels.push(frame);
+            hipChartInstance.data.datasets[0].data.push(hipHeightData[frame]);
+            // Redraw the chart with the new point, without animating the chart itself
+            hipChartInstance.update('none'); 
+        }
+
+        frame++;
+        playbackAnimationId = requestAnimationFrame(animate);
+    };
+
+    animate();
 }
 
 
 function resetSession() {
+    // Hide the report and show the start screen
     reportView.style.display = 'none';
     startView.style.display = 'block';
-    resetPoseStats();
-
-    // Clear recorded data
-    recordedLandmarks = [];
-    hipHeightData = [];
-    isSessionRunning = true; // Hack to stop playback animation loop
-
-    // Destroy old chart instance
-    if (hipChartInstance) {
-        hipChartInstance.destroy();
+    
+    if (playbackAnimationId) {
+        cancelAnimationFrame(playbackAnimationId);
+        playbackAnimationId = null;
     }
     
+    resetPoseStats();
+
+    // Clear recorded data for the next session
+    recordedLandmarks = [];
+    hipHeightData = [];
+
+    // Destroy the old chart instance to prevent memory leaks
+    if (hipChartInstance) {
+        hipChartInstance.destroy();
+        hipChartInstance = null;
+    }
+    
+    // Re-enable the playback button for the next report
     playButton.disabled = false;
     playButton.innerText = "Play 3D Reps";
 
@@ -208,9 +253,6 @@ function resetSession() {
     document.getElementById('rep-quality').innerText = 'N/A';
     document.getElementById('depth').innerText = 'N/A';
     document.getElementById('symmetry').innerText = 'N/A';
-
-    // Set back to false after a short delay
-    setTimeout(() => { isSessionRunning = false; }, 100);
 }
 
 function generateReport() {
@@ -229,9 +271,9 @@ function generateReport() {
     document.getElementById('report-symmetry-avg').innerText = `${avgSymmetry.toFixed(0)}°`;
     document.getElementById('report-valgus-count').innerText = `${valgusCount} of ${SQUAT_TARGET} reps`;
     
-    // Render the Hip Height Chart
-    const hipHeightChartCanvas = document.getElementById('hipHeightChart'); // Get the canvas element
-    hipChartInstance = renderHipHeightChart(hipHeightChartCanvas, hipHeightData); // Pass the element to the function
+    // Render the Hip Height Chart with an empty dataset to start
+    const hipHeightChartCanvas = document.getElementById('hipHeightChart');
+    hipChartInstance = renderHipHeightChart(hipHeightChartCanvas, []);
 
 }
 
