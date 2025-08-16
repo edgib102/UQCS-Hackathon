@@ -52,7 +52,8 @@ let liveScene, playbackScene;
 let playbackAnimationId = null;
 let frameCounter = 0;
 let playbackOffset = 0;
-// ADDED: State variable to track dragging on the chart
+let currentVideoBlobUrl = null;
+let downloadBlobUrl = null;
 let isDraggingOnChart = false;
 
 // IMPROVED: More aggressive filtering for webcam noise
@@ -184,7 +185,8 @@ async function startSession() {
     mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
     mediaRecorder.onstop = () => {
         const blob = new Blob(recordedChunks, { type: 'video/webm' });
-        downloadButton.href = URL.createObjectURL(blob);
+        downloadBlobUrl = URL.createObjectURL(blob);
+        downloadButton.href = downloadBlobUrl;
         recordedChunks = [];
     };
     mediaRecorder.start();
@@ -204,7 +206,8 @@ function startUploadSession(file) {
     downloadButton.style.display = 'none';
 
     videoElement.style.display = 'block';
-    videoElement.src = URL.createObjectURL(file);
+    currentVideoBlobUrl = URL.createObjectURL(file);
+    videoElement.src = currentVideoBlobUrl;
     videoElement.load();
     videoElement.onloadeddata = () => {
         loadingElement.style.display = 'none';
@@ -295,12 +298,26 @@ function startPlayback() {
 }
 
 function resetSession() {
+    // Hide all views except the start view
     reportView.style.display = 'none';
+    sessionView.style.display = 'none';
     startView.style.display = 'block';
+
+    // Stop any ongoing playback animation
     if (playbackAnimationId) cancelAnimationFrame(playbackAnimationId);
+    
+    // Revoke old blob URLs to prevent memory leaks
+    if (currentVideoBlobUrl) {
+        URL.revokeObjectURL(currentVideoBlobUrl);
+        currentVideoBlobUrl = null;
+    }
+    if (downloadBlobUrl) {
+        URL.revokeObjectURL(downloadBlobUrl);
+        downloadBlobUrl = null;
+    }
 
-    playbackSlider.style.display = 'none';
 
+    // Reset session-specific state variables
     isSessionRunning = false;
     frameCounter = 0;
     playbackOffset = 0;
@@ -310,17 +327,31 @@ function resetSession() {
     hipHeightData = [];
     symmetryData = [];
     valgusData = []; // ADDED
+    recordedChunks = [];
 
+    // Reset landmark filters
     for (let i = 0; i < 33; i++) {
         screenLandmarkFilters[i].reset();
         worldLandmarkFilters[i].reset();
     }
 
+    // Destroy the old chart instance
     if (hipChartInstance) {
         hipChartInstance.destroy();
         hipChartInstance = null;
     }
 
+    // Fully reset the video element to prevent source conflicts
+    videoElement.pause();
+    videoElement.src = '';
+    videoElement.srcObject = null;
+    videoElement.load();
+
+    // FIX: Clear the file input so the same file can be selected again
+    videoUploadInput.value = null;
+
+
+    // Reset the report UI elements
     const scoreCircle = document.querySelector('.score-circle');
     if (scoreCircle) scoreCircle.style.setProperty('--p', 0);
     document.getElementById('report-score-value').innerText = '0';
@@ -330,11 +361,14 @@ function resetSession() {
     });
     playButton.disabled = false;
     playButton.innerText = "Play 3D Reps";
+    downloadButton.href = '#';
 
+    // Reset the live stats UI
     document.getElementById('rep-quality').innerText = 'LIVE';
     document.getElementById('depth').innerText = 'N/A';
     document.getElementById('symmetry').innerText = 'N/A';
 }
+
 
 /**
  * Updates the UI with detailed feedback for a specific metric.
