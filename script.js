@@ -1,9 +1,18 @@
-import { updatePose, getPoseStats, resetPoseStats } from "./posedata.js";
+import { 
+    updatePose, 
+    getPoseStats, 
+    resetPoseStats,
+    calculateAngle,
+    getLandmarkProxy,
+    SQUAT_THRESHOLD,
+    KNEE_VISIBILITY_THRESHOLD
+} from "./posedata.js";
 import { createLiveScene, createPlaybackScene } from "./pose3d.js";
 import { renderHipHeightChart } from "./chart.js";
 
 // --- Configuration ---
-const SQUAT_TARGET = 2;
+const SQUAT_TARGET = 5;
+const PLAYBACK_FPS = 30; // For calculating the 1-second offset
 
 // --- DOM Elements ---
 const videoElement = document.getElementById('video');
@@ -25,6 +34,7 @@ const playButton = document.getElementById('playButton');
 let mediaRecorder;
 let recordedChunks = [];
 let recordedLandmarks = [];
+let recordedPoseLandmarks = []; // To find squat start
 let hipHeightData = [];
 let hipChartInstance;
 let isSessionRunning = false;
@@ -72,8 +82,10 @@ function onResults(results) {
         if (results.poseWorldLandmarks) {
             // Update the live 3D scene
             liveScene.update(results.poseWorldLandmarks);
-            // Record the 3D landmarks for playback
+            
+            // Record data needed for playback and analysis
             recordedLandmarks.push(JSON.parse(JSON.stringify(results.poseWorldLandmarks)));
+            recordedPoseLandmarks.push(JSON.parse(JSON.stringify(results.poseLandmarks)));
 
             // Now, determine the corresponding hip height for this exact recorded frame.
             const leftHip = results.poseLandmarks[23];
@@ -82,7 +94,6 @@ function onResults(results) {
                 const avgHipY = (leftHip.y + rightHip.y) / 2;
                 hipHeightData.push(avgHipY);
             } else {
-                // IMPORTANT: Push null to keep the chart data perfectly synced with the 3D data.
                 hipHeightData.push(null);
             }
         }
@@ -145,7 +156,7 @@ async function startSession() {
 
     await camera.start();
     
-    const stream = outputCanvas.captureStream(30);
+    const stream = outputCanvas.captureStream(PLAYBACK_FPS);
     mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
     mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
     mediaRecorder.onstop = () => {
@@ -236,6 +247,7 @@ function resetSession() {
 
     // Clear recorded data for the next session
     recordedLandmarks = [];
+    recordedPoseLandmarks = []; // Reset new array
     hipHeightData = [];
 
     // Destroy the old chart instance to prevent memory leaks
@@ -259,6 +271,37 @@ function generateReport() {
     const { repHistory } = getPoseStats();
     if (repHistory.length === 0) return;
 
+    // --- 💡 ADD THIS BLOCK: CROP PLAYBACK ---
+    let firstSquatStartFrame = 0;
+    for (let i = 0; i < recordedPoseLandmarks.length; i++) {
+        const landmarks = recordedPoseLandmarks[i];
+        if (!landmarks) continue;
+        
+        const { left, right } = getLandmarkProxy(landmarks);
+        
+        if (left.knee.visibility > KNEE_VISIBILITY_THRESHOLD && right.knee.visibility > KNEE_VISIBILITY_THRESHOLD) {
+            const leftKneeAngle = calculateAngle(left.hip, left.knee, left.ankle);
+            const rightKneeAngle = calculateAngle(right.hip, right.knee, right.ankle);
+            
+            if (leftKneeAngle < SQUAT_THRESHOLD && rightKneeAngle < SQUAT_THRESHOLD) {
+                firstSquatStartFrame = i;
+                break; // Found the first frame, exit loop
+            }
+        }
+    }
+
+    // Calculate the new starting point (1 second before the squat)
+    const playbackStartFrame = Math.max(0, firstSquatStartFrame - PLAYBACK_FPS);
+
+    // If we have a new start time, slice all the data arrays
+    if (playbackStartFrame > 0) {
+        recordedLandmarks = recordedLandmarks.slice(playbackStartFrame);
+        recordedPoseLandmarks = recordedPoseLandmarks.slice(playbackStartFrame);
+        hipHeightData = hipHeightData.slice(playbackStartFrame);
+    }
+    // --- END BLOCK ---
+
+
     const avgDepth = repHistory.reduce((s, r) => s + r.depth, 0) / repHistory.length;
     const avgSymmetry = repHistory.reduce((s, r) => s + (r.symmetry || 0), 0) / repHistory.length;
     const valgusCount = repHistory.filter(r => r.kneeValgus).length;
@@ -271,10 +314,18 @@ function generateReport() {
     document.getElementById('report-symmetry-avg').innerText = `${avgSymmetry.toFixed(0)}°`;
     document.getElementById('report-valgus-count').innerText = `${valgusCount} of ${SQUAT_TARGET} reps`;
     
+    // Clean up the (now cropped) data for better visualization
+    const firstValidHipHeight = hipHeightData.find(h => h !== null);
+    if (firstValidHipHeight !== undefined) {
+        const firstValidIndex = hipHeightData.indexOf(firstValidHipHeight);
+        for (let i = 0; i < firstValidIndex; i++) {
+            hipHeightData[i] = firstValidHipHeight;
+        }
+    }
+
     // Render the Hip Height Chart with an empty dataset to start
     const hipHeightChartCanvas = document.getElementById('hipHeightChart');
     hipChartInstance = renderHipHeightChart(hipHeightChartCanvas, []);
-
 }
 
 // --- Event Listeners ---
