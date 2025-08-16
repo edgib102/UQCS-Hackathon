@@ -136,9 +136,42 @@ export function processAndRenderReport(sessionData) {
     const confidenceMultiplier = Math.max(0.7, avgConfidence);
     const totalScore = Math.round((depthScore + symmetryScore + valgusScore + consistencyScore) * confidenceMultiplier);
 
-    // --- UI Updates ---
-    const scoreCircle = document.querySelector('.score-circle');
-    const scoreValueEl = document.getElementById('report-score-value');
+    
+
+// --- UI Updates ---
+const scoreValueEl = document.getElementById('report-score-value');
+const scoreCircle = document.querySelector('.score-circle');
+
+const endScore = totalScore;
+const duration = 1500; // Animation duration in milliseconds
+let animationFrameId = null;
+
+const animateScore = (startTime) => {
+    const elapsedTime = Date.now() - startTime;
+    const progress = Math.min(elapsedTime / duration, 1); // Ensure progress doesn't exceed 1 (100%)
+
+    const currentScore = Math.round(progress * endScore);
+
+    scoreValueEl.innerText = currentScore;
+    scoreCircle.style.setProperty('--p', currentScore);
+
+    if (progress < 1) {
+        // If the animation is not finished, request the next frame
+        animationFrameId = requestAnimationFrame(() => animateScore(startTime));
+    }
+};
+
+// Kick off the animation
+requestAnimationFrame(() => animateScore(Date.now()));
+
+// A fallback to ensure the final score is set, just in case.
+setTimeout(() => {
+    cancelAnimationFrame(animationFrameId); // Stop any running animation
+    scoreValueEl.innerText = endScore;
+    scoreCircle.style.setProperty('--p', endScore);
+}, duration + 50); // A little after the animation should have finished
+
+    // Set the final value immediately in the background in case animation is slow
     setTimeout(() => scoreCircle.style.setProperty('--p', totalScore), 100);
     scoreValueEl.innerText = totalScore;
 
