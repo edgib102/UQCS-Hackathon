@@ -30,7 +30,7 @@ const startButton = document.getElementById('startButton');
 const resetButton = document.getElementById('resetButton');
 const downloadButton = document.getElementById('downloadButton');
 const playButton = document.getElementById('playButton');
-const videoUploadInput = document.getElementById('videoUpload'); // New Line
+const videoUploadInput = document.getElementById('videoUpload');
 
 // --- State Management ---
 let mediaRecorder;
@@ -38,14 +38,15 @@ let recordedChunks = [];
 let recordedLandmarks = [];
 let recordedPoseLandmarks = [];
 let hipHeightData = [];
-let symmetryData = []; // Add this
+let symmetryData = [];
 let hipChartInstance;
 let isSessionRunning = false;
-let isProcessingUpload = false; // New Line
+let isProcessingUpload = false;
 let liveScene, playbackScene;
-let playbackAnimationId = null; // To control the animation loop
-let isStoppingSession = false; // ADDED: Flag to prevent multiple stop calls
-let sessionStopTimeoutId = null; // ADDED: Timeout ID for delayed stop
+let playbackAnimationId = null;
+let isStoppingSession = false;
+let sessionStopTimeoutId = null;
+let playbackFrameCounter = 0; // New counter for playback speed
 
 // --- MediaPipe Pose ---
 const pose = new Pose({
@@ -73,11 +74,9 @@ const camera = new Camera(videoElement, {
 function onResults(results) {
     if (!isSessionRunning || !videoElement.videoWidth) return;
     
-    // Get latest pose stats first
     updatePose(results);
     const stats = getPoseStats();
 
-    // MODIFIED: Pass the kneeValgus state to the draw function
     drawFrame(results, stats.kneeValgus);
     
     if (results.poseLandmarks) {
@@ -86,7 +85,6 @@ function onResults(results) {
             recordedLandmarks.push(JSON.parse(JSON.stringify(results.poseWorldLandmarks)));
             recordedPoseLandmarks.push(JSON.parse(JSON.stringify(results.poseLandmarks)));
 
-            // Record hip height
             const leftHip = results.poseLandmarks[23];
             const rightHip = results.poseLandmarks[24];
             if (leftHip.visibility > 0.5 && rightHip.visibility > 0.5) {
@@ -95,7 +93,6 @@ function onResults(results) {
                 hipHeightData.push(null);
             }
 
-            // Record symmetry percentage
             const { left, right } = getLandmarkProxy(results.poseLandmarks);
             if (left.knee.visibility > KNEE_VISIBILITY_THRESHOLD && right.knee.visibility > KNEE_VISIBILITY_THRESHOLD) {
                 const leftKneeAngle = calculateAngle(left.hip, left.knee, left.ankle);
@@ -122,7 +119,6 @@ function onResults(results) {
     }
 }
 
-// MODIFIED: This function now accepts a boolean to control leg color
 function drawFrame(results, kneeValgus = false) {
     if (loadingElement.style.display !== 'none') {
         loadingElement.style.display = 'none';
@@ -135,22 +131,18 @@ function drawFrame(results, kneeValgus = false) {
     canvasCtx.drawImage(videoElement, 0, 0, outputCanvas.width, outputCanvas.height);
     
     if (results.poseLandmarks) {
-        // Define which connections belong to the legs
         const legConnections = new Set([[23, 25], [25, 27], [24, 26], [26, 28]].map(JSON.stringify));
         
-        // Separate the connections for conditional coloring
         const otherBodyConnections = POSE_CONNECTIONS.filter(conn => {
             return conn[0] > 10 && conn[1] > 10 && !legConnections.has(JSON.stringify(conn.sort((a,b) => a-b)));
         });
         const legConnectionArray = Array.from(legConnections).map(JSON.parse);
 
-        const legColor = kneeValgus ? '#FF4136' : '#DDDDDD'; // Use a bright red for valgus
+        const legColor = kneeValgus ? '#FF4136' : '#DDDDDD';
 
-        // Draw the main body and the legs with their respective colors
         drawConnectors(canvasCtx, results.poseLandmarks, otherBodyConnections, { color: '#DDDDDD', lineWidth: 4 });
         drawConnectors(canvasCtx, results.poseLandmarks, legConnectionArray, { color: legColor, lineWidth: 6 });
 
-        // Draw only the body landmarks (excluding the face)
         const bodyLandmarks = results.poseLandmarks.slice(11);
         drawLandmarks(canvasCtx, bodyLandmarks, { color: '#00CFFF', lineWidth: 2 });
     }
@@ -189,7 +181,6 @@ async function startSession() {
     mediaRecorder.start();
 }
 
-// New function for file upload
 function startUploadSession(file) {
     if (!liveScene) {
         liveScene = createLiveScene(document.getElementById('pose3dCanvas'));
@@ -217,7 +208,6 @@ function startUploadSession(file) {
     };
 }
 
-// New function to process frames from a video element
 async function processVideoFrames() {
     if (!isProcessingUpload) return;
     
@@ -255,6 +245,7 @@ function startPlayback() {
     if (playbackAnimationId) {
         cancelAnimationFrame(playbackAnimationId);
     }
+    playbackFrameCounter = 0; // Reset the new counter
 
     let frame = 0;
     playButton.disabled = true;
@@ -263,7 +254,7 @@ function startPlayback() {
     if (hipChartInstance) {
         hipChartInstance.data.labels = [];
         hipChartInstance.data.datasets[0].data = [];
-        hipChartInstance.data.datasets[1].data = []; // Clear symmetry data
+        hipChartInstance.data.datasets[1].data = [];
         hipChartInstance.update('none');
     }
 
@@ -274,18 +265,37 @@ function startPlayback() {
             return; 
         }
 
+        // Only update on every 2nd frame to slow down playback
+        playbackFrameCounter++;
+        if (playbackFrameCounter % 2 !== 0) {
+            playbackAnimationId = requestAnimationFrame(animate);
+            return;
+        }
+
         if (frame >= recordedLandmarks.length) {
             playButton.disabled = false;
             playButton.innerText = "Replay";
             return;
         }
 
-        playbackScene.update(recordedLandmarks[frame]);
+        const currentLandmarks = recordedPoseLandmarks[frame];
         
+        let hasKneeValgus = false;
+        if (currentLandmarks) {
+            const { left, right } = getLandmarkProxy(currentLandmarks);
+            const VALGUS_THRESHOLD = 0.02;
+            const leftValgus = left.knee.x < left.ankle.x - VALGUS_THRESHOLD;
+            const rightValgus = right.knee.x > right.ankle.x + VALGUS_THRESHOLD;
+            hasKneeValgus = leftValgus || rightValgus;
+        }
+        
+        playbackScene.update(recordedLandmarks[frame]);
+        playbackScene.updateColors(hasKneeValgus);
+
         if (hipChartInstance) {
             hipChartInstance.data.labels.push(frame);
             hipChartInstance.data.datasets[0].data.push(hipHeightData[frame]);
-            hipChartInstance.data.datasets[1].data.push(symmetryData[frame]); // Add symmetry data
+            hipChartInstance.data.datasets[1].data.push(symmetryData[frame]);
             hipChartInstance.update('none'); 
         }
 
@@ -295,7 +305,6 @@ function startPlayback() {
 
     animate();
 }
-
 
 function resetSession() {
     reportView.style.display = 'none';
@@ -317,7 +326,7 @@ function resetSession() {
     recordedLandmarks = [];
     recordedPoseLandmarks = [];
     hipHeightData = [];
-    symmetryData = []; // Reset symmetry data
+    symmetryData = [];
 
     if (hipChartInstance) {
         hipChartInstance.destroy();
@@ -337,7 +346,6 @@ function generateReport() {
     const { repHistory } = getPoseStats();
     if (repHistory.length === 0) return;
 
-    // --- CROP PLAYBACK ---
     let firstSquatStartFrame = 0;
     for (let i = 0; i < recordedPoseLandmarks.length; i++) {
         const landmarks = recordedPoseLandmarks[i];
@@ -357,10 +365,9 @@ function generateReport() {
         recordedLandmarks = recordedLandmarks.slice(playbackStartFrame);
         recordedPoseLandmarks = recordedPoseLandmarks.slice(playbackStartFrame);
         hipHeightData = hipHeightData.slice(playbackStartFrame);
-        symmetryData = symmetryData.slice(playbackStartFrame); // Crop symmetry data
+        symmetryData = symmetryData.slice(playbackStartFrame);
     }
 
-    // --- CALCULATE STATS & UPDATE UI ---
     const avgDepth = repHistory.reduce((s, r) => s + r.depth, 0) / repHistory.length;
     const avgSymmetry = repHistory.reduce((s, r) => s + (r.symmetry || 0), 0) / repHistory.length;
     const valgusCount = repHistory.filter(r => r.kneeValgus).length;
@@ -372,7 +379,6 @@ function generateReport() {
     document.getElementById('report-symmetry-avg').innerText = `${avgSymmetry.toFixed(0)}°`;
     document.getElementById('report-valgus-count').innerText = `${valgusCount} of ${SQUAT_TARGET} reps`;
     
-    // --- CLEAN UP GRAPH VISUAL ---
     const firstValidHipHeight = hipHeightData.find(h => h !== null);
     if (firstValidHipHeight !== undefined) {
         const firstValidIndex = hipHeightData.indexOf(firstValidHipHeight);
@@ -384,7 +390,10 @@ function generateReport() {
         for (let i = 0; i < firstValidIndex; i++) symmetryData[i] = firstValidSymmetry;
     }
 
-    // Render the chart with empty datasets
+    if (hipChartInstance) {
+        hipChartInstance.destroy();
+    }
+    
     const hipHeightChartCanvas = document.getElementById('hipHeightChart');
     hipChartInstance = renderHipHeightChart(hipHeightChartCanvas, [], []);
 }

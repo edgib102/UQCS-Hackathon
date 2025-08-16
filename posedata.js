@@ -17,7 +17,7 @@ let repStartTime = null;
 // ---- Thresholds ----
 const STANDING_THRESHOLD = 160;
 export const SQUAT_THRESHOLD = 110;
-export const KNEE_VISIBILITY_THRESHOLD = 0.65;
+export const KNEE_VISIBILITY_THRESHOLD = 0.8;
 export const SYMMETRY_THRESHOLD = 20; // Export this
 const VALGUS_THRESHOLD = 0.02;
 

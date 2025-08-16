@@ -119,6 +119,31 @@ class PoseScene {
             this.camera.lookAt(hipCenter);
         }
     }
+    
+    updateColors(hasKneeValgus) {
+        const valgusColor = new THREE.Color(0xFF4136);
+        
+        CONNECTIONS.forEach((conn, idx) => {
+            // Check if the connection involves the legs (hip, knee, or ankle landmarks)
+            const isLegConnection = ([23, 25, 27, 24, 26, 28].includes(conn[0]) && [23, 25, 27, 24, 26, 28].includes(conn[1]));
+
+            if (isLegConnection) {
+                const line = this.boneLines[idx];
+                let newColor;
+
+                if (hasKneeValgus) {
+                    newColor = valgusColor;
+                } else {
+                    // Re-calculate the default color
+                    newColor = LANDMARK_COLORS.CENTER;
+                    if (LEFT_INDICES.includes(conn[0])) newColor = LANDMARK_COLORS.LEFT;
+                    else if (RIGHT_INDICES.includes(conn[0])) newColor = LANDMARK_COLORS.RIGHT;
+                }
+
+                line.material.color.set(newColor);
+            }
+        });
+    }
 }
 
 // --- Exported Factory Functions ---
