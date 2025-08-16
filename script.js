@@ -243,7 +243,9 @@ function startPlayback() {
 
         const originalFrame = frame + playbackOffset;
         const currentRep = repFrameMap.get(originalFrame);
-        const hasKneeValgus = currentRep ? currentRep.kneeValgus : false;
+        
+        const VALGUS_VISUAL_THRESHOLD = 0.03; // 3cm
+        const hasKneeValgus = currentRep ? (currentRep.maxLeftValgus > VALGUS_VISUAL_THRESHOLD || currentRep.maxRightValgus > VALGUS_VISUAL_THRESHOLD) : false;
         
         playbackScene.update(recordedWorldLandmarks[frame]);
         playbackScene.updateColors(hasKneeValgus);
@@ -318,8 +320,9 @@ function updateBreakdown(metric, score, weight, value) {
                         : `There's a noticeable imbalance (${value.toFixed(0)}%). You may be favoring one side. Try to push the ground away evenly with both legs.`;
             break;
         case 'valgus':
+            // FIX: Pass the integer 'valgusCount' to this function, not the decimal 'avgMaxValgus'
             description = value === 0 ? `Perfect! Your knees remained stable and did not cave inwards on any rep.`
-                        : value <= 2 ? `Good stability, but your knees caved in on ${value} rep(s). Focus on actively pushing your knees outwards as you stand up.`
+                        : value === 1 ? `Good stability, but your knees caved in on 1 rep. Focus on actively pushing your knees outwards as you stand up.`
                         : `Your knees caved in on ${value} reps, increasing injury risk. Actively push your knees out, especially when tired.`;
             break;
         case 'consistency':
@@ -341,6 +344,7 @@ function generateReport() {
     
     const repsForReport = finalRepHistory;
 
+    // --- FIX: Restore the data cropping logic ---
     const firstSquatStartFrame = repsForReport[0].startFrame;
     const lastSquatEndFrame = repsForReport[repsForReport.length - 1].endFrame;
     const cropStartFrame = Math.max(0, firstSquatStartFrame - PLAYBACK_FPS);
@@ -363,9 +367,10 @@ function generateReport() {
     const avgSymmetryPercent = 100 * Math.exp(-0.07 * avgSymmetryDiff);
     const symmetryScore = (avgSymmetryPercent / 100) * weights.symmetry;
 
-    const valgusCount = repsForReport.filter(r => r.kneeValgus).length;
-    const valgusPenalty = (valgusCount / repsForReport.length) * weights.valgus;
-    const valgusScore = Math.max(0, weights.valgus - valgusPenalty);
+    const avgMaxValgus = repsForReport.reduce((s, r) => s + Math.max(r.maxLeftValgus, r.maxRightValgus), 0) / repsForReport.length;
+    const UNACCEPTABLE_VALGUS_METERS = 0.08;
+    const valgusProgress = Math.max(0, 1 - (avgMaxValgus / UNACCEPTABLE_VALGUS_METERS));
+    const valgusScore = valgusProgress * weights.valgus;
 
     const depths = repsForReport.map(r => r.depth);
     const meanDepth = depths.reduce((a, b) => a + b) / depths.length;
@@ -384,10 +389,15 @@ function generateReport() {
     document.getElementById('report-quality-overall').innerText = totalScore > 85 ? "Excellent" : totalScore > 65 ? "Good" : "Needs Work";
     document.getElementById('report-depth-avg').innerText = `${avgDepthAngle.toFixed(0)}°`;
     document.getElementById('report-symmetry-avg').innerText = `${avgSymmetryPercent.toFixed(0)}%`;
+    
+    // FIX: Calculate the simple count of reps with valgus for the UI text
+    const VALGUS_THRESHOLD_METERS = 0.03; // 3cm
+    const valgusCount = repsForReport.filter(r => r.maxLeftValgus > VALGUS_THRESHOLD_METERS || r.maxRightValgus > VALGUS_THRESHOLD_METERS).length;
     document.getElementById('report-valgus-count').innerText = `${valgusCount} of ${repsForReport.length} reps`;
 
     updateBreakdown('depth', depthScore, weights.depth, avgDepthAngle);
     updateBreakdown('symmetry', symmetryScore, weights.symmetry, avgSymmetryPercent);
+    // FIX: Pass the integer valgusCount to the breakdown function
     updateBreakdown('valgus', valgusScore, weights.valgus, valgusCount);
     updateBreakdown('consistency', consistencyScore, weights.consistency, stdDev);
     

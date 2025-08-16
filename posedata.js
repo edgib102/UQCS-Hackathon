@@ -32,29 +32,24 @@ export function getLandmarkProxy(landmarks) {
     };
 }
 
-// --- NEW: Highly Accurate 3D Valgus Calculation ---
 function calculateValgusState(worldLandmarks) {
     const proxy = getLandmarkProxy(worldLandmarks);
     if (!proxy) return { left: 0, right: 0 };
 
-    // Left Leg
     const hipAnkleL = vec3.subtract(proxy.left.ankle, proxy.left.hip);
     const hipKneeL = vec3.subtract(proxy.left.knee, proxy.left.hip);
     const projL = vec3.dot(hipKneeL, hipAnkleL) / vec3.dot(hipAnkleL, hipAnkleL);
     const closestPointL = vec3.add(proxy.left.hip, vec3.scale(hipAnkleL, projL));
     const deviationL = vec3.subtract(proxy.left.knee, closestPointL);
     const leftDist = vec3.magnitude(deviationL);
-    // Medial deviation for the left knee is in the positive X direction
     const leftIsMedial = deviationL.x > 0;
 
-    // Right Leg
     const hipAnkleR = vec3.subtract(proxy.right.ankle, proxy.right.hip);
     const hipKneeR = vec3.subtract(proxy.right.knee, proxy.right.hip);
     const projR = vec3.dot(hipKneeR, hipAnkleR) / vec3.dot(hipAnkleR, hipAnkleR);
     const closestPointR = vec3.add(proxy.right.hip, vec3.scale(hipAnkleR, projR));
     const deviationR = vec3.subtract(proxy.right.knee, closestPointR);
     const rightDist = vec3.magnitude(deviationR);
-    // Medial deviation for the right knee is in the negative X direction
     const rightIsMedial = deviationR.x < 0;
 
     return {
@@ -114,7 +109,27 @@ export function analyzeSession(allLandmarks, allWorldLandmarks) {
 
     const finalReps = [];
     for (const troughIndex of troughs) {
-        const proxyAtTrough = getLandmarkProxy(allLandmarks[troughIndex]);
+        const lmAtTrough = allLandmarks[troughIndex];
+        if (!lmAtTrough) continue;
+
+        // --- NEW VALIDATION STEP 1: Check Landmark Visibility ---
+        const hipL = lmAtTrough[23]; const kneeL = lmAtTrough[25]; const ankleL = lmAtTrough[27];
+        const hipR = lmAtTrough[24]; const kneeR = lmAtTrough[26]; const ankleR = lmAtTrough[28];
+        if (!hipL || !kneeL || !ankleL || !hipR || !kneeR || !ankleR ||
+            hipL.visibility < KNEE_VISIBILITY_THRESHOLD || kneeL.visibility < KNEE_VISIBILITY_THRESHOLD ||
+            ankleL.visibility < KNEE_VISIBILITY_THRESHOLD || hipR.visibility < KNEE_VISIBILITY_THRESHOLD ||
+            kneeR.visibility < KNEE_VISIBILITY_THRESHOLD || ankleR.visibility < KNEE_VISIBILITY_THRESHOLD) {
+            continue; // Reject rep if key landmarks are not clearly visible
+        }
+
+        // --- NEW VALIDATION STEP 2: Biomechanical Check (Hips vs Knees) ---
+        const avgHipY = (hipL.y + hipR.y) / 2;
+        const avgKneeY = (kneeL.y + kneeR.y) / 2;
+        if (avgHipY < avgKneeY) {
+            continue; // Reject rep if hips are not below or level with knees (in screen space)
+        }
+
+        const proxyAtTrough = getLandmarkProxy(lmAtTrough);
         if (!proxyAtTrough) continue;
 
         const depthAngle = calculateAngle(proxyAtTrough.left.hip, proxyAtTrough.left.knee, proxyAtTrough.left.ankle);
