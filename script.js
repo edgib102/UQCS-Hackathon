@@ -442,7 +442,12 @@ function generateReport() {
     // IMPROVED: More realistic consistency scoring
     const depths = finalRepHistory.map(r => r.depth);
     const avgDepth = depths.reduce((a, b) => a + b, 0) / depths.length;
-    const stdDev = depths.length > 1 ? Math.sqrt(depths.map(x => Math.pow(x - avgDepth, 2)).reduce((a, b) => a + b) / (depths.length - 1)) : 0;
+    const stdDev = depths.length > 1
+    ? Math.sqrt(
+        depths.map(x => Math.pow((x - avgDepth) * 1.2, 2)) // harsher deviations
+                .reduce((a, b) => a + b) / (depths.length - 1)
+        )
+    : 0;
 
     // More realistic thresholds for webcam-based analysis
     const EXCELLENT_STD_DEV = 5;    // Very tight consistency
