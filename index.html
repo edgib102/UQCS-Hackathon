@@ -3,23 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-    <link rel="stylesheet" href="static\style.css">
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.1/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-
-    <script src="/static/script.js" type="module"></script>
-    <script src="/static/posedata.js" type="module"></script>
+    <title>AI Squat Counter</title>
+    <link rel="stylesheet" href="static/style.css">
 </head>
 <body>
-    <div class="video-wrapper">
-        <video id="webcam" autoplay playsinline></video>
-        <canvas id="output"></canvas>        
-    </div>
-    <div class="stats-container">
-        <h2>Rep count: <span id="rep-counter"></span></h1>
-        <h2>Squat Depth Reached: <span id="squat-depth"></span></h1>
+    <div class="container">
+        <h1>AI Squat Counter</h1>
+        <div class="main-content">
+            <div class="video-wrapper">
+                <p>2D Camera View</p>
+                <video id="video" autoplay playsinline></video>
+                <canvas id="outputCanvas" class="output-canvas"></canvas>
+            </div>
+            <div class="video-wrapper">
+                <p>3D Skeleton View</p>
+                <canvas id="pose3dCanvas"></canvas>
+            </div>
+        </div>
+        <div class="stats-container">
+            <h2>Rep Count: <span id="rep-counter">0</span></h2>
+            <h2>Squat Depth Reached: <span id="squat-depth">No</span></h2>
+        </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    
+    <script src="/static/script.js" type="module"></script>
 </body>
 </html>

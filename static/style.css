@@ -1,15 +1,125 @@
-.test{
-    background-color: red;
-}
-.video-wrapper{
-    display: flex;
-    gap: 1rem;
-}
-#webcam{
-    display: none;
-}
-#webcam, #output{
-    width: 40rem;
-    aspect-ratio: 4/3;
+/* --- Global Styles & Resets --- */
+:root {
+    --background-color: #121212;
+    --surface-color: #1e1e1e;
+    --primary-text: #e0e0e0;
+    --secondary-text: #aaaaaa;
+    --accent-color: #00ff00;
+    --border-radius: 8px;
 }
 
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--background-color);
+    color: var(--primary-text);
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 1rem;
+}
+
+/* --- Main Layout Container --- */
+.container {
+    width: 100%;
+    max-width: 1400px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2rem;
+}
+
+h1 {
+    font-size: 2.5rem;
+    color: var(--accent-color);
+    text-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
+}
+
+/* --- Video & Canvas Layout --- */
+.main-content {
+    display: flex;
+    flex-wrap: wrap; /* Allows items to stack on smaller screens */
+    justify-content: center;
+    gap: 2rem;
+    width: 100%;
+}
+
+.video-wrapper {
+    position: relative; /* Anchor for the overlay canvas */
+    flex: 1; /* Each wrapper takes up equal space */
+    min-width: 320px; /* Minimum width before stacking */
+    max-width: 640px;
+    background-color: var(--surface-color);
+    border-radius: var(--border-radius);
+    overflow: hidden; /* Keeps the video within the rounded corners */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.video-wrapper p {
+    text-align: center;
+    padding: 0.5rem;
+    font-weight: bold;
+    color: var(--secondary-text);
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+video,
+canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-bottom-left-radius: var(--border-radius);
+    border-bottom-right-radius: var(--border-radius);
+}
+
+/* This is the key for the 2D overlay */
+.output-canvas {
+    position: absolute;
+    top: 36px; /* Adjust based on the height of the <p> tag */
+    left: 0;
+}
+
+/* --- Statistics Display --- */
+.stats-container {
+    display: flex;
+    justify-content: space-around;
+    width: 100%;
+    max-width: 800px;
+    background-color: var(--surface-color);
+    padding: 1.5rem;
+    border-radius: var(--border-radius);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.stats-container h2 {
+    font-size: 1.5rem;
+    color: var(--secondary-text);
+}
+
+.stats-container h2 span {
+    font-weight: bold;
+    color: var(--primary-text);
+}
+
+/* --- Responsive Adjustments for Mobile --- */
+@media (max-width: 768px) {
+    h1 {
+        font-size: 2rem;
+    }
+
+    .stats-container {
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem;
+    }
+
+    .stats-container h2 {
+        font-size: 1.2rem;
+    }
+}
