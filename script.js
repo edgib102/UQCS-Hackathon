@@ -104,10 +104,20 @@ function drawFrame(results) {
     canvasCtx.save();
     canvasCtx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
     canvasCtx.drawImage(videoElement, 0, 0, outputCanvas.width, outputCanvas.height);
+    
     if (results.poseLandmarks) {
-        drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#DDDDDD', lineWidth: 4 });
-        drawLandmarks(canvasCtx, results.poseLandmarks, { color: '#00CFFF', lineWidth: 2 });
+        // Filter out facial landmarks (0-10) and their connections
+        const bodyLandmarks = results.poseLandmarks.slice(11);
+        const bodyConnections = POSE_CONNECTIONS.filter(
+            ([start, end]) => start > 10 && end > 10
+        );
+
+        // Draw body connectors
+        drawConnectors(canvasCtx, results.poseLandmarks, bodyConnections, { color: '#DDDDDD', lineWidth: 4 });
+        // Draw body landmarks
+        drawLandmarks(canvasCtx, bodyLandmarks, { color: '#00CFFF', lineWidth: 2 });
     }
+    
     canvasCtx.restore();
 }
 
