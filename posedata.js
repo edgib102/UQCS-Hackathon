@@ -98,8 +98,8 @@ export function resetPoseStats() {
 // ---- Helper Functions ----
 function checkKneeValgus(left, right, leftVisible, rightVisible) {
     if (!leftVisible || !rightVisible) return false;
-    const leftValgus = left.knee.x < left.ankle.x || left.knee.x > left.hip.x;
-    const rightValgus = right.knee.x > right.ankle.x || right.knee.x < right.hip.x;
+    const leftValgus = left.knee.x < left.ankle.x;
+    const rightValgus = right.knee.x > right.ankle.x;
     return leftValgus || rightValgus;
 }
 
