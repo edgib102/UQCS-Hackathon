@@ -34,6 +34,8 @@ const resetButton = document.getElementById('resetButton');
 const downloadButton = document.getElementById('downloadButton');
 const playButton = document.getElementById('playButton');
 const videoUploadInput = document.getElementById('videoUpload');
+const playbackSlider = document.getElementById('playbackSlider');
+
 
 // --- State Management ---
 let mediaRecorder;
@@ -50,6 +52,8 @@ let liveScene, playbackScene;
 let playbackAnimationId = null;
 let frameCounter = 0;
 let playbackOffset = 0;
+// ADDED: State variable to track dragging on the chart
+let isDraggingOnChart = false;
 
 // IMPROVED: More aggressive filtering for webcam noise
 let screenLandmarkFilters = {};
@@ -230,59 +234,59 @@ function stopSession() {
     if (!playbackScene) playbackScene = createPlaybackScene(playbackCanvas);
 }
 
+// MODIFIED: Function to update the playback state (3D scene, slider, chart)
+function updatePlaybackFrame(frame) {
+    if (!recordedWorldLandmarks[frame] || !hipChartInstance) return;
+
+    // Update 3D Scene
+    const currentRep = finalRepHistory.find(rep => {
+        const originalFrame = frame + playbackOffset;
+        return originalFrame >= rep.startFrame && originalFrame <= rep.endFrame;
+    });
+    const VALGUS_VISUAL_THRESHOLD = 0.08;
+    const hasKneeValgus = currentRep ? (currentRep.maxLeftValgus > VALGUS_VISUAL_THRESHOLD || currentRep.maxRightValgus > VALGUS_VISUAL_THRESHOLD) : false;
+    playbackScene.update(recordedWorldLandmarks[frame]);
+    playbackScene.updateColors(hasKneeValgus);
+    
+    // Update Slider
+    playbackSlider.value = frame;
+
+    // Update Chart Cursor
+    hipChartInstance.options.plugins.playbackCursor.frame = frame;
+    hipChartInstance.update('none');
+}
+
+
 function startPlayback() {
-    if (playbackAnimationId) cancelAnimationFrame(playbackAnimationId);
+    if (playbackAnimationId) {
+        cancelAnimationFrame(playbackAnimationId);
+        playbackAnimationId = null;
+    }
     if (!playbackScene) playbackScene = createPlaybackScene(playbackCanvas);
     if (finalRepHistory.length === 0 || recordedWorldLandmarks.length === 0) return;
 
-    const repFrameMap = new Map();
-    finalRepHistory.forEach((rep) => {
-        for (let i = rep.startFrame; i <= rep.endFrame; i++) {
-            repFrameMap.set(i, rep);
-        }
-    });
-
-    let frame = 0;
+    // MODIFIED: Read start frame from slider, reset to 0 if at the end
+    let frame = parseInt(playbackSlider.value, 10);
+    if (frame >= recordedWorldLandmarks.length - 1) {
+        frame = 0;
+    }
+    
     playButton.disabled = true;
     playButton.innerText = "Playing...";
     
-    // MODIFIED: Chart is now rendered with full data at report generation.
-    // This section is no longer needed.
-    /*
-    if (hipChartInstance) {
-        hipChartInstance.data.labels = [];
-        hipChartInstance.data.datasets[0].data = [];
-        hipChartInstance.data.datasets[1].data = [];
-        hipChartInstance.update('none');
-    }
-    */
-
     const animate = () => {
-        if (reportView.style.display === 'none' || frame >= recordedWorldLandmarks.length) {
+        if (frame >= recordedWorldLandmarks.length) {
             playButton.disabled = false;
             playButton.innerText = "Replay";
+            // ADDED: Clear cursor when playback ends
+            if (hipChartInstance) {
+                hipChartInstance.options.plugins.playbackCursor.frame = null;
+                hipChartInstance.update('none');
+            }
             return;
         }
-
-        const originalFrame = frame + playbackOffset;
-        const currentRep = repFrameMap.get(originalFrame);
-
-        // IMPROVED: More conservative threshold for visual feedback
-        const VALGUS_VISUAL_THRESHOLD = 0.08;
-        const hasKneeValgus = currentRep ? (currentRep.maxLeftValgus > VALGUS_VISUAL_THRESHOLD || currentRep.maxRightValgus > VALGUS_VISUAL_THRESHOLD) : false;
-
-        playbackScene.update(recordedWorldLandmarks[frame]);
-        playbackScene.updateColors(hasKneeValgus);
         
-        // MODIFIED: Chart is no longer animated frame-by-frame during playback
-        /*
-        if (hipChartInstance) {
-            hipChartInstance.data.labels.push(originalFrame);
-            hipChartInstance.data.datasets[0].data.push(hipHeightData[frame]);
-            hipChartInstance.data.datasets[1].data.push(symmetryData[frame]);
-            hipChartInstance.update('none');
-        }
-        */
+        updatePlaybackFrame(frame);
 
         frame++;
         playbackAnimationId = requestAnimationFrame(animate);
@@ -294,6 +298,8 @@ function resetSession() {
     reportView.style.display = 'none';
     startView.style.display = 'block';
     if (playbackAnimationId) cancelAnimationFrame(playbackAnimationId);
+
+    playbackSlider.style.display = 'none';
 
     isSessionRunning = false;
     frameCounter = 0;
@@ -418,69 +424,52 @@ function generateReport() {
     valgusData = valgusData.slice(cropStartFrame, cropEndFrame); // ADDED
 
     // --- SCORING LOGIC (UNCHANGED) ---
-    // IMPROVED: More webcam-friendly depth scoring
     const SQUAT_IDEAL_DEPTH = 90;
     const SQUAT_ATG_DEPTH = 75;
     const avgDepthAngle = finalRepHistory.reduce((sum, rep) => sum + rep.depth, 0) / finalRepHistory.length;
-
     const getDepthProgress = (angle) => {
         if (angle >= STANDING_THRESHOLD) return 0;
         if (angle <= SQUAT_IDEAL_DEPTH) return 1.0;
         const progress = (STANDING_THRESHOLD - angle) / (STANDING_THRESHOLD - SQUAT_IDEAL_DEPTH);
-        // Gentler curve for more encouraging feedback
         return Math.sqrt(progress);
     };
-
     const baseProgress = getDepthProgress(avgDepthAngle);
     const atgBonus = avgDepthAngle < SQUAT_IDEAL_DEPTH
         ? ((SQUAT_IDEAL_DEPTH - Math.max(SQUAT_ATG_DEPTH, avgDepthAngle)) / (SQUAT_IDEAL_DEPTH - SQUAT_ATG_DEPTH)) * 0.1
         : 0;
     const depthScore = Math.min(1.0, baseProgress + atgBonus) * SCORE_WEIGHTS.depth;
-
-    // IMPROVED: More forgiving symmetry scoring
     const avgSymmetryDiff = finalRepHistory.reduce((s, r) => s + r.symmetry, 0) / finalRepHistory.length;
     const avgSymmetryPercent = 100 * Math.exp(-0.05 * avgSymmetryDiff); // More forgiving exponential
     const symmetryScore = (avgSymmetryPercent / 100) * SCORE_WEIGHTS.symmetry;
-
-    // IMPROVED: More realistic valgus scoring for webcam
-    const VALGUS_THRESHOLD = 0.12; // More conservative threshold for 2D analysis
-    const SEVERE_VALGUS = 0.25;    // Higher threshold for severe cases
+    const VALGUS_THRESHOLD = 0.12; 
+    const SEVERE_VALGUS = 0.25;
     let valgusScore = SCORE_WEIGHTS.valgus;
     let valgusCount = 0;
-
     finalRepHistory.forEach(rep => {
         const maxValgus = Math.max(rep.maxLeftValgus, rep.maxRightValgus);
         if (maxValgus > VALGUS_THRESHOLD) {
             valgusCount++;
-            // More graduated penalty system
-            let penalty = SCORE_WEIGHTS.valgus / Math.max(8, finalRepHistory.length); // Base penalty
-
+            let penalty = SCORE_WEIGHTS.valgus / Math.max(8, finalRepHistory.length);
             if (maxValgus > SEVERE_VALGUS) {
-                penalty *= 2.0; // Double penalty for severe cases
+                penalty *= 2.0;
             } else if (maxValgus > VALGUS_THRESHOLD * 1.5) {
-                penalty *= 1.5; // 50% extra for moderate cases
+                penalty *= 1.5;
             }
-
             valgusScore -= penalty;
         }
     });
     valgusScore = Math.max(0, valgusScore);
-
-    // IMPROVED: More realistic consistency scoring
     const depths = finalRepHistory.map(r => r.depth);
     const avgDepth = depths.reduce((a, b) => a + b, 0) / depths.length;
     const stdDev = depths.length > 1
     ? Math.sqrt(
-        depths.map(x => Math.pow((x - avgDepth) * 1.2, 2)) // harsher deviations
+        depths.map(x => Math.pow((x - avgDepth) * 1.2, 2))
                 .reduce((a, b) => a + b) / (depths.length - 1)
         )
     : 0;
-
-    // More realistic thresholds for webcam-based analysis
-    const EXCELLENT_STD_DEV = 5;    // Very tight consistency
-    const GOOD_STD_DEV = 12;        // Reasonable consistency
-    const MAX_ACCEPTABLE_STD_DEV = 20; // Still acceptable
-
+    const EXCELLENT_STD_DEV = 5;
+    const GOOD_STD_DEV = 12;
+    const MAX_ACCEPTABLE_STD_DEV = 20;
     let consistencyProgress;
     if (stdDev <= EXCELLENT_STD_DEV) {
         consistencyProgress = 1.0;
@@ -491,13 +480,9 @@ function generateReport() {
     } else {
         consistencyProgress = Math.max(0, 0.3 * Math.exp(-0.1 * (stdDev - MAX_ACCEPTABLE_STD_DEV)));
     }
-
     const consistencyScore = consistencyProgress * SCORE_WEIGHTS.consistency;
-
-    // IMPROVED: Weight scores by confidence for reps with low tracking quality
     const avgConfidence = finalRepHistory.reduce((sum, rep) => sum + (rep.confidence || 1), 0) / finalRepHistory.length;
-    const confidenceMultiplier = Math.max(0.7, avgConfidence); // Don't penalize too harshly
-
+    const confidenceMultiplier = Math.max(0.7, avgConfidence);
     const totalScore = Math.round((depthScore + symmetryScore + valgusScore + consistencyScore) * confidenceMultiplier);
     // --- END SCORING LOGIC ---
 
@@ -507,7 +492,6 @@ function generateReport() {
     setTimeout(() => scoreCircle.style.setProperty('--p', totalScore), 100);
     scoreValueEl.innerText = totalScore;
 
-    // IMPROVED: More nuanced quality assessment
     let qualityText = "Needs Improvement";
     if (totalScore > 85) qualityText = "Excellent";
     else if (totalScore > 75) qualityText = "Very Good";
@@ -525,33 +509,25 @@ function generateReport() {
     updateBreakdown('consistency', consistencyScore, SCORE_WEIGHTS.consistency, { stdDev: stdDev });
 
 
-    // --- ADDED: Generate consistency data and render the new chart ---
-    // Find the average hip Y-coordinate at the bottom of each rep
     const repDepthsY = finalRepHistory.map(rep => {
-        // Find the frame index of the deepest point of the squat (trough)
         const troughFrameInOriginalData = Math.floor((rep.startFrame + rep.endFrame) / 2);
-        // Adjust this index to match the cropped data arrays
         const adjustedTroughFrame = troughFrameInOriginalData - playbackOffset;
-        
         if (adjustedTroughFrame >= 0 && adjustedTroughFrame < hipHeightData.length) {
             return hipHeightData[adjustedTroughFrame];
         }
         return null;
-    }).filter(y => y !== null); // Filter out any reps that might be out of bounds
+    }).filter(y => y !== null);
 
     let avgRepDepthY = null;
     if (repDepthsY.length > 0) {
         avgRepDepthY = repDepthsY.reduce((sum, y) => sum + y, 0) / repDepthsY.length;
     }
 
-    // Create an array of the same length, where every value is the average
-    // This will render as a straight horizontal line on the chart
     const consistencyData = avgRepDepthY ? Array(hipHeightData.length).fill(avgRepDepthY) : [];
     
     const hipHeightChartCanvas = document.getElementById('hipHeightChart');
     if (hipChartInstance) hipChartInstance.destroy();
     
-    // Pass all four data arrays to the charting function
     hipChartInstance = renderHipHeightChart(
         hipHeightChartCanvas, 
         hipHeightData, 
@@ -559,6 +535,51 @@ function generateReport() {
         valgusData,
         consistencyData
     );
+
+    playbackSlider.max = recordedWorldLandmarks.length - 1;
+    playbackSlider.value = 0;
+    playbackSlider.style.display = 'inline-block';
+
+    // ADDED: Logic for dragging directly on the chart canvas
+    const handleChartDrag = (e) => {
+        const canvas = hipHeightChartCanvas;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+
+        // Convert pixel position to data index
+        const xAxis = hipChartInstance.scales.x;
+        let frame = Math.round(xAxis.getValueForPixel(x));
+        
+        // Clamp the value to be within the valid range of frames
+        frame = Math.max(0, Math.min(frame, recordedWorldLandmarks.length - 1));
+
+        updatePlaybackFrame(frame);
+    };
+
+    hipHeightChartCanvas.addEventListener('mousedown', (e) => {
+        isDraggingOnChart = true;
+        // Stop any ongoing animation
+        if (playbackAnimationId) {
+            cancelAnimationFrame(playbackAnimationId);
+            playbackAnimationId = null;
+            playButton.disabled = false;
+            playButton.innerText = "Play 3D Reps";
+        }
+        handleChartDrag(e);
+    });
+
+    hipHeightChartCanvas.addEventListener('mousemove', (e) => {
+        if (isDraggingOnChart) {
+            handleChartDrag(e);
+        }
+    });
+
+    const stopDragging = () => {
+        isDraggingOnChart = false;
+    };
+
+    hipHeightChartCanvas.addEventListener('mouseup', stopDragging);
+    hipHeightChartCanvas.addEventListener('mouseleave', stopDragging);
     // --- END ADDED ---
 }
 
@@ -570,4 +591,15 @@ playButton.addEventListener('click', startPlayback);
 videoUploadInput.addEventListener('change', (event) => {
     const file = event.target.files[0];
     if (file) startUploadSession(file);
+});
+
+playbackSlider.addEventListener('input', (e) => {
+    if (playbackAnimationId) {
+        cancelAnimationFrame(playbackAnimationId);
+        playbackAnimationId = null;
+        playButton.disabled = false;
+        playButton.innerText = "Play 3D Reps";
+    }
+    const frame = parseInt(e.target.value, 10);
+    updatePlaybackFrame(frame);
 });

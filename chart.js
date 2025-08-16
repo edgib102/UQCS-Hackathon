@@ -7,15 +7,46 @@
  * @param {number[]} consistencyData An array representing the average rep depth y-coordinate.
  * @returns {Chart} The Chart.js instance.
  */
+
+// ADDED: A Chart.js plugin to draw a vertical line for playback scrubbing
+const playbackCursorPlugin = {
+  id: 'playbackCursor',
+  afterDraw: (chart) => {
+    const frame = chart.options.plugins.playbackCursor.frame;
+    if (frame === null || frame === undefined) {
+      return;
+    }
+
+    const ctx = chart.ctx;
+    const xAxis = chart.scales.x;
+    const yAxis = chart.scales.y;
+    const xPos = xAxis.getPixelForValue(frame);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(xPos, yAxis.top);
+    ctx.lineTo(xPos, yAxis.bottom);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#FF4136'; // A bright, visible color
+    ctx.stroke();
+    ctx.restore();
+  }
+};
+
+
 // MODIFIED: Updated function signature and logic
 export function renderHipHeightChart(canvas, hipData, symmetryData, stabilityData, consistencyData) {
   if (!canvas) return null;
   const ctx = canvas.getContext('2d');
 
+  // ADDED: Register the custom plugin
+  Chart.register(playbackCursorPlugin);
+
   const chartConfig = {
     type: 'line',
     data: {
-      labels: hipData.map((_, index) => index),
+      // MODIFIED: Use the length of the data for labels, not frame index
+      labels: Array.from({ length: hipData.length }, (_, i) => i),
       datasets: [
         {
           label: 'Hip Height (Depth)',
@@ -65,6 +96,10 @@ export function renderHipHeightChart(canvas, hipData, symmetryData, stabilityDat
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
+        // ADDED: Configuration for our custom plugin
+        playbackCursor: {
+          frame: null
+        },
         legend: {
           display: true, // Display labels for the lines
           labels: {
