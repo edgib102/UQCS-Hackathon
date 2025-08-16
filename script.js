@@ -619,10 +619,23 @@ function generateReport() {
 }
 
 // --- Event Listeners ---
+function togglePlayback() {
+    if (playbackAnimationId) {
+        // Animation is running, so PAUSE
+        cancelAnimationFrame(playbackAnimationId);
+        playbackAnimationId = null;
+        playButton.disabled = false;
+        playButton.innerText = "Play 3D Reps";
+    } else {
+        // Animation is paused, so PLAY
+        startPlayback(); // This function handles the rest of the logic
+    }
+}
+
 startButton.addEventListener('click', startSession);
 finishButton.addEventListener('click', stopSession);
 resetButton.addEventListener('click', resetSession);
-playButton.addEventListener('click', startPlayback);
+playButton.addEventListener('click', togglePlayback);
 videoUploadInput.addEventListener('change', (event) => {
     const file = event.target.files[0];
     if (file) startUploadSession(file);
@@ -637,4 +650,12 @@ playbackSlider.addEventListener('input', (e) => {
     }
     const frame = parseInt(e.target.value, 10);
     updatePlaybackFrame(frame);
+});
+
+document.addEventListener('keydown', (event) => {
+    // Only trigger if the report view is active and the user isn't typing in an input
+    if (reportView.style.display === 'block' && event.target.tagName !== 'INPUT' && event.code === 'Space') {
+        event.preventDefault(); // Prevent default browser action (e.g., scrolling)
+        togglePlayback();
+    }
 });
