@@ -57,11 +57,11 @@ const pose = new Pose({
 });
 
 pose.setOptions({
-    modelComplexity: 1,
+    modelComplexity: 2,
     smoothLandmarks: true,
     enableSegmentation: false,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5
+    minDetectionConfidence: 0.75,
+    minTrackingConfidence: 0.75
 });
 
 // --- Main Callback ---
