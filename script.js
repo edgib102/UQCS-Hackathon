@@ -302,38 +302,72 @@ function resetSession() {
     document.getElementById('symmetry').innerText = 'N/A';
 }
 
-function updateBreakdown(metric, score, weight, value) {
+/**
+ * Updates the UI with detailed feedback for a specific metric.
+ * @param {string} metric - The metric being updated ('depth', 'symmetry', etc.).
+ * @param {number} score - The calculated score for the metric.
+ * @param {number} weight - The maximum possible score for the metric.
+ * @param {object} values - An object containing relevant data for the feedback text.
+ */
+function updateBreakdown(metric, score, weight, values) {
     const scoreEl = document.getElementById(`breakdown-score-${metric}`);
     const descEl = document.getElementById(`breakdown-desc-${metric}`);
     scoreEl.innerText = `${Math.round(score)}/${weight}`;
     let description = '';
-    
+
+    const performanceTier = score / weight; // 0.0 to 1.0
+
     switch (metric) {
         case 'depth':
-            description = score > weight * 0.85 ? `Excellent depth! Your average angle of ${value.toFixed(0)}° shows great range of motion.`
-                        : score > weight * 0.6 ? `Good depth. You're reaching an average of ${value.toFixed(0)}°. Try to go a little lower.`
-                        : `Your depth of ${value.toFixed(0)}° is shallow. Focus on lowering your hips until they are parallel with your knees.`;
+            const { avgAngle } = values;
+            if (performanceTier > 0.9) {
+                description = `Fantastic depth! Your average angle of ${avgAngle.toFixed(0)}° shows an excellent range of motion. This is key for maximizing muscle activation.`;
+            } else if (performanceTier > 0.65) {
+                description = `Good depth. You're reaching ${avgAngle.toFixed(0)}° on average. Focus on sinking your hips just a little lower to get parallel (90°) for even better results.`;
+            } else {
+                description = `Your depth is currently shallow at ${avgAngle.toFixed(0)}°. Work on flexibility and control to lower your hips until your thighs are parallel with the floor.`;
+            }
             break;
+
         case 'symmetry':
-            description = score > weight * 0.85 ? `Great balance, with an average symmetry of ${value.toFixed(0)}%. Your weight seems evenly distributed.`
-                        : score > weight * 0.6 ? `Good symmetry (${value.toFixed(0)}%). There's a slight imbalance. Focus on keeping pressure even across both feet.`
-                        : `There's a noticeable imbalance (${value.toFixed(0)}%). You may be favoring one side. Try to push the ground away evenly with both legs.`;
+            const { avgPercent } = values;
+            if (performanceTier > 0.9) {
+                description = `Excellent balance! With ${avgPercent.toFixed(0)}% symmetry, your form is very stable and weight is evenly distributed. Keep it up!`;
+            } else if (performanceTier > 0.65) {
+                description = `Good symmetry (${avgPercent.toFixed(0)}%). There's a slight imbalance. Try focusing on pushing the ground away with both feet equally, especially as you stand up.`;
+            } else {
+                description = `A significant imbalance was detected (${avgPercent.toFixed(0)}%). You might be favoring one side. This can lead to injury. Try squatting without weight to rebuild a stable foundation.`;
+            }
             break;
+
         case 'valgus':
-            // FIX: Pass the integer 'valgusCount' to this function, not the decimal 'avgMaxValgus'
-            description = value === 0 ? `Perfect! Your knees remained stable and did not cave inwards on any rep.`
-                        : value === 1 ? `Good stability, but your knees caved in on 1 rep. Focus on actively pushing your knees outwards as you stand up.`
-                        : `Your knees caved in on ${value} reps, increasing injury risk. Actively push your knees out, especially when tired.`;
+            const { count, totalReps } = values;
+            if (count === 0) {
+                description = `Perfect knee stability! Your knees tracked perfectly over your feet on all ${totalReps} reps. This is crucial for long-term joint health.`;
+            } else if (count <= 2 && totalReps > 5) {
+                description = `Good stability. Your knees caved in on ${count} rep${count > 1 ? 's' : ''}. This often happens with fatigue. Focus on actively pushing your knees outwards.`;
+            } else {
+                description = `Your knees caved inwards on ${count} of ${totalReps} reps. This is a common issue called "knee valgus" and increases injury risk. Strengthen your glutes and focus on pushing your knees out.`;
+            }
             break;
+            
         case 'consistency':
-             description = score > weight * 0.85 ? `Excellent consistency, with a depth variation of only ${value.toFixed(1)}°. You maintained solid form.`
-                         : score > weight * 0.6 ? `Good job. There were some minor variations (${value.toFixed(1)}°) in your form. Aim for every rep to look the same.`
-                         : `Your form was inconsistent (depth varied by ${value.toFixed(1)}°). This can happen with fatigue. Focus on control, not just reps.`;
+            const { stdDev } = values;
+            if (performanceTier > 0.9) {
+                description = `Incredibly consistent! Your depth varied by only ${stdDev.toFixed(1)}°. Every rep was a mirror of the last. This is professional-level form.`;
+            } else if (performanceTier > 0.65) {
+                description = `Good consistency. A small variation of ${stdDev.toFixed(1)}° was detected. Aim for each rep to feel and look identical for maximum efficiency and safety.`;
+            } else {
+                description = `Your form was inconsistent, with depth varying by ${stdDev.toFixed(1)}°. This often means you're losing focus or control under fatigue. Prioritize quality over quantity on every single rep.`;
+            }
             break;
     }
     descEl.innerText = description;
 }
 
+/**
+ * Analyzes the completed session, calculates scores, and populates the report view.
+ */
 function generateReport() {
     finalRepHistory = analyzeSession(recordedPoseLandmarks, recordedWorldLandmarks);
     if (finalRepHistory.length === 0) {
@@ -342,11 +376,9 @@ function generateReport() {
         return;
     }
     
-    const repsForReport = finalRepHistory;
-
-    // --- FIX: Restore the data cropping logic ---
-    const firstSquatStartFrame = repsForReport[0].startFrame;
-    const lastSquatEndFrame = repsForReport[repsForReport.length - 1].endFrame;
+    // Crop the data arrays to focus only on the detected squats for playback
+    const firstSquatStartFrame = finalRepHistory[0].startFrame;
+    const lastSquatEndFrame = finalRepHistory[finalRepHistory.length - 1].endFrame;
     const cropStartFrame = Math.max(0, firstSquatStartFrame - PLAYBACK_FPS);
     const cropEndFrame = Math.min(frameCounter, lastSquatEndFrame + PLAYBACK_FPS);
 
@@ -357,28 +389,65 @@ function generateReport() {
     symmetryData = symmetryData.slice(cropStartFrame, cropEndFrame);
     
     const weights = { depth: 30, symmetry: 30, valgus: 20, consistency: 20 };
-    const SQUAT_IDEAL_DEPTH = 90;
 
-    const avgDepthAngle = repsForReport.reduce((s, r) => s + r.depth, 0) / repsForReport.length;
-    const depthProgress = (STANDING_THRESHOLD - avgDepthAngle) / (STANDING_THRESHOLD - SQUAT_IDEAL_DEPTH);
-    const depthScore = Math.max(0, Math.min(1, depthProgress)) * weights.depth;
+    // --- 1. DEPTH SCORING (Optimized with non-linear curve and ATG bonus) ---
+    const SQUAT_IDEAL_DEPTH = 90; // Parallel is the goal for a full score
+    const SQUAT_ATG_DEPTH = 75;   // "Ass-to-grass" depth for bonus points
+    const avgDepthAngle = finalRepHistory.reduce((sum, rep) => sum + rep.depth, 0) / finalRepHistory.length;
 
-    const avgSymmetryDiff = repsForReport.reduce((s, r) => s + r.symmetry, 0) / repsForReport.length;
+    const getDepthProgress = (angle) => {
+        if (angle >= STANDING_THRESHOLD) return 0;
+        if (angle <= SQUAT_IDEAL_DEPTH) return 1.0;
+        const progress = (STANDING_THRESHOLD - angle) / (STANDING_THRESHOLD - SQUAT_IDEAL_DEPTH);
+        // Apply an easing function (sine curve) to make progress feel more rewarding
+        return Math.sin(progress * Math.PI / 2);
+    };
+
+    const baseProgress = getDepthProgress(avgDepthAngle);
+    const atgBonus = avgDepthAngle < SQUAT_IDEAL_DEPTH 
+        ? ((SQUAT_IDEAL_DEPTH - Math.max(SQUAT_ATG_DEPTH, avgDepthAngle)) / (SQUAT_IDEAL_DEPTH - SQUAT_ATG_DEPTH)) * 0.15 // Bonus up to 15%
+        : 0;
+    const depthScore = Math.min(1.0, baseProgress + atgBonus) * weights.depth;
+
+
+    // --- 2. SYMMETRY SCORING (Original exponential model is effective) ---
+    const avgSymmetryDiff = finalRepHistory.reduce((s, r) => s + r.symmetry, 0) / finalRepHistory.length;
     const avgSymmetryPercent = 100 * Math.exp(-0.07 * avgSymmetryDiff);
     const symmetryScore = (avgSymmetryPercent / 100) * weights.symmetry;
 
-    const avgMaxValgus = repsForReport.reduce((s, r) => s + Math.max(r.maxLeftValgus, r.maxRightValgus), 0) / repsForReport.length;
-    const UNACCEPTABLE_VALGUS_METERS = 0.08;
-    const valgusProgress = Math.max(0, 1 - (avgMaxValgus / UNACCEPTABLE_VALGUS_METERS));
-    const valgusScore = valgusProgress * weights.valgus;
 
-    const depths = repsForReport.map(r => r.depth);
-    const meanDepth = depths.reduce((a, b) => a + b) / depths.length;
-    const stdDev = depths.length > 1 ? Math.sqrt(depths.map(x => Math.pow(x - meanDepth, 2)).reduce((a, b) => a + b) / (depths.length -1)) : 0;
-    const MAX_ACCEPTABLE_STD_DEV = 10;
-    const consistencyProgress = Math.max(0, 1 - (stdDev / MAX_ACCEPTABLE_STD_DEV));
+    // --- 3. VALGUS SCORING (Optimized to penalize per-rep events and severity) ---
+    const VALGUS_THRESHOLD_METERS = 0.03; // 3cm deviation is a flag
+    const SEVERE_VALGUS_METERS = 0.06;    // 6cm is a major issue
+    let valgusScore = weights.valgus;
+    let valgusCount = 0;
+
+    finalRepHistory.forEach(rep => {
+        const maxValgus = Math.max(rep.maxLeftValgus, rep.maxRightValgus);
+        if (maxValgus > VALGUS_THRESHOLD_METERS) {
+            valgusCount++;
+            // Base penalty scales with set length to be fair
+            let penalty = weights.valgus / Math.max(5, finalRepHistory.length);
+            // Add a severity multiplier for significant knee cave
+            if (maxValgus > SEVERE_VALGUS_METERS) {
+                penalty *= 1.5;
+            }
+            valgusScore -= penalty;
+        }
+    });
+    valgusScore = Math.max(0, valgusScore);
+
+
+    // --- 4. CONSISTENCY SCORING (Optimized with stricter threshold and power curve) ---
+    const depths = finalRepHistory.map(r => r.depth);
+    const stdDev = depths.length > 1 ? Math.sqrt(depths.map(x => Math.pow(x - avgDepthAngle, 2)).reduce((a, b) => a + b) / (depths.length - 1)) : 0;
+    const MAX_ACCEPTABLE_STD_DEV = 4; // Stricter than before
+    // Use a power curve to penalize larger deviations more heavily
+    const consistencyProgress = Math.max(0, 1 - Math.pow(stdDev / MAX_ACCEPTABLE_STD_DEV, 1.5));
     const consistencyScore = consistencyProgress * weights.consistency;
     
+    
+    // --- FINAL SCORE CALCULATION & UI UPDATE ---
     const totalScore = Math.round(depthScore + symmetryScore + valgusScore + consistencyScore);
     
     const scoreCircle = document.querySelector('.score-circle');
@@ -386,20 +455,15 @@ function generateReport() {
     setTimeout(() => scoreCircle.style.setProperty('--p', totalScore), 100);
     scoreValueEl.innerText = totalScore;
     
-    document.getElementById('report-quality-overall').innerText = totalScore > 85 ? "Excellent" : totalScore > 65 ? "Good" : "Needs Work";
+    document.getElementById('report-quality-overall').innerText = totalScore > 85 ? "Excellent" : totalScore > 65 ? "Good" : "Needs Improvement";
     document.getElementById('report-depth-avg').innerText = `${avgDepthAngle.toFixed(0)}°`;
     document.getElementById('report-symmetry-avg').innerText = `${avgSymmetryPercent.toFixed(0)}%`;
-    
-    // FIX: Calculate the simple count of reps with valgus for the UI text
-    const VALGUS_THRESHOLD_METERS = 0.03; // 3cm
-    const valgusCount = repsForReport.filter(r => r.maxLeftValgus > VALGUS_THRESHOLD_METERS || r.maxRightValgus > VALGUS_THRESHOLD_METERS).length;
-    document.getElementById('report-valgus-count').innerText = `${valgusCount} of ${repsForReport.length} reps`;
+    document.getElementById('report-valgus-count').innerText = `${valgusCount} of ${finalRepHistory.length} reps`;
 
-    updateBreakdown('depth', depthScore, weights.depth, avgDepthAngle);
-    updateBreakdown('symmetry', symmetryScore, weights.symmetry, avgSymmetryPercent);
-    // FIX: Pass the integer valgusCount to the breakdown function
-    updateBreakdown('valgus', valgusScore, weights.valgus, valgusCount);
-    updateBreakdown('consistency', consistencyScore, weights.consistency, stdDev);
+    updateBreakdown('depth', depthScore, weights.depth, { avgAngle: avgDepthAngle });
+    updateBreakdown('symmetry', symmetryScore, weights.symmetry, { avgPercent: avgSymmetryPercent });
+    updateBreakdown('valgus', valgusScore, weights.valgus, { count: valgusCount, totalReps: finalRepHistory.length });
+    updateBreakdown('consistency', consistencyScore, weights.consistency, { stdDev: stdDev });
     
     const hipHeightChartCanvas = document.getElementById('hipHeightChart');
     if (hipChartInstance) hipChartInstance.destroy();
