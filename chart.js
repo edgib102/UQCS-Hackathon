@@ -32,26 +32,49 @@ const playbackCursorPlugin = {
   }
 };
 
+// MODIFIED: A Chart.js plugin to draw a shaded background region for a selected rep
+const repHighlighterPlugin = {
+  id: 'repHighlighter',
+  beforeDatasetsDraw: (chart) => {
+    const { startFrame, endFrame, color } = chart.options.plugins.repHighlighter;
+    // It will not draw if no color is provided
+    if (startFrame === null || endFrame === null || !color) {
+      return;
+    }
+
+    const ctx = chart.ctx;
+    const xAxis = chart.scales.x;
+    const yAxis = chart.scales.y;
+
+    const startX = xAxis.getPixelForValue(startFrame);
+    const endX = xAxis.getPixelForValue(endFrame);
+
+    ctx.save();
+    // Use the dynamic color from the plugin options
+    ctx.fillStyle = color; 
+    ctx.fillRect(startX, yAxis.top, endX - startX, yAxis.height);
+    ctx.restore();
+  }
+};
+
 
 // MODIFIED: Updated function signature and logic
 export function renderHipHeightChart(canvas, hipData, symmetryData, stabilityData) {
   if (!canvas) return null;
   const ctx = canvas.getContext('2d');
 
-  // ADDED: Register the custom plugin
-  Chart.register(playbackCursorPlugin);
+  // MODIFIED: Register both custom plugins
+  Chart.register(playbackCursorPlugin, repHighlighterPlugin);
 
   const chartConfig = {
     type: 'line',
     data: {
-      // MODIFIED: Use the length of the data for labels, not frame index
       labels: Array.from({ length: hipData.length }, (_, i) => i),
       datasets: [
         {
           label: 'Hip Height (Depth)',
           data: hipData,
           borderColor: '#00CFFF',
-          backgroundColor: 'rgba(0, 207, 255, 0.1)',
           fill: true,
           tension: 0.4,
           pointRadius: 0,
@@ -67,12 +90,10 @@ export function renderHipHeightChart(canvas, hipData, symmetryData, stabilityDat
           pointRadius: 0,
           yAxisID: 'y1', // Assign to the right y-axis
         },
-        // ADDED: Dataset for Knee Stability
         {
           label: 'Knee Stability',
           data: stabilityData,
           borderColor: '#FF4136', // A new distinct color
-          backgroundColor: 'rgba(54, 162, 235, 0.1)',
           fill: false,
           tension: 0.4,
           pointRadius: 0,
@@ -84,9 +105,14 @@ export function renderHipHeightChart(canvas, hipData, symmetryData, stabilityDat
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        // ADDED: Configuration for our custom plugin
         playbackCursor: {
           frame: null
+        },
+        // MODIFIED: Default configuration now includes a 'color' property
+        repHighlighter: {
+            startFrame: null,
+            endFrame: null,
+            color: null
         },
         legend: {
           display: true, // Display labels for the lines
@@ -129,7 +155,6 @@ export function renderHipHeightChart(canvas, hipData, symmetryData, stabilityDat
           max: 100,
           title: {
             display: true,
-            // MODIFIED: More generic title for the axis
             text: 'Performance (%)',
             color: '#FF9E00',
             font: { family: "'Roboto Mono', monospace" }

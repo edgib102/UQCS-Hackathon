@@ -3,7 +3,7 @@
 import { getLivePoseStats, getLandmarkProxy, calculateAngle, calculateValgusState } from "./posedata.js";
 import { createLiveScene, createPlaybackScene } from "./pose3d.js";
 import { LandmarkFilter } from "./filter.js";
-import { processAndRenderReport } from "./report.js"; // <-- NEW IMPORT
+import { processAndRenderReport } from "./report.js";
 
 // --- DOM Elements ---
 const videoElement = document.getElementById('video');
@@ -134,6 +134,21 @@ function onResults(results) {
         }
         depthEl.innerText = depthText;
         symmetryEl.innerText = stats.liveSymmetry ? `${stats.liveSymmetry.toFixed(0)}°` : 'N/A';
+
+        const cueElement = document.getElementById('rep-quality'); 
+
+        if (stats.kneeValgus) {
+            cueElement.innerText = 'PUSH KNEES OUT';
+            cueElement.style.color = '#FF4136';
+        } else if (stats.liveDepth && stats.liveDepth < 110) { 
+            cueElement.innerText = 'GOOD DEPTH';
+            cueElement.style.color = '#39CCCC';
+        } else {
+            if (squatState === 'up') {
+                cueElement.innerText = 'LIVE';
+                cueElement.style.color = 'white'; 
+            }
+        }
     }
 }
 
@@ -150,20 +165,17 @@ function drawFrame(results) {
 
 
     if (results.poseLandmarks) {
-        // Get live stats again, or pass them into drawFrame
         const stats = getLivePoseStats(results.poseLandmarks, recordedWorldLandmarks[recordedWorldLandmarks.length-1]);
 
-        const legConnections = [[23, 25], [25, 27], [24, 26], [26, 28]]; // L-Hip/Knee, L-Knee/Ankle etc.
-        const valgusColor = '#FF4136'; // Bright Red
+        const legConnections = [[23, 25], [25, 27], [24, 26], [26, 28]]; 
+        const valgusColor = '#FF4136'; 
         const defaultColor = '#DDDDDD';
 
-        // Draw all connections except legs first
         const nonLegConnections = POSE_CONNECTIONS.filter(c => !legConnections.some(lc => lc.join(',') === c.join(',')));
         drawConnectors(canvasCtx, results.poseLandmarks, nonLegConnections, { color: defaultColor, lineWidth: 4 });
 
-        // Now draw leg connections with conditional color
         const legColor = stats.kneeValgus ? valgusColor : defaultColor;
-        drawConnectors(canvasCtx, results.poseLandmarks, legConnections, { color: legColor, lineWidth: 6 }); // Thicker line
+        drawConnectors(canvasCtx, results.poseLandmarks, legConnections, { color: legColor, lineWidth: 6 }); 
 
         drawLandmarks(canvasCtx, results.poseLandmarks, { color: '#00CFFF', lineWidth: 2 });
     }
@@ -241,13 +253,11 @@ function stopSession() {
 
     if (hipChartInstance) hipChartInstance.destroy();
     
-    // Call the refactored report generation function
     const reportResult = processAndRenderReport({
         recordedPoseLandmarks, recordedWorldLandmarks, hipHeightData, symmetryData, valgusData, frameCounter
     });
 
     if (reportResult) {
-        // Update state with the processed & cropped data from the report
         finalRepHistory = reportResult.finalRepHistory;
         playbackOffset = reportResult.playbackOffset;
         hipChartInstance = reportResult.chartInstance;
@@ -257,37 +267,61 @@ function stopSession() {
         updatePlaybackFrame(0);
 
         if (finalRepHistory.length > 0) {
-            // Find the rep with the most knee valgus (worst stability)
             const worstStabRep = finalRepHistory.reduce((prev, current) => {
                 const prevValgus = Math.max(prev.maxLeftValgus, prev.maxRightValgus);
                 const currentValgus = Math.max(current.maxLeftValgus, current.maxRightValgus);
                 return (currentValgus > prevValgus) ? current : prev;
             });
 
-            // Find the rep with the smallest angle (deepest squat)
             const bestDepthRep = finalRepHistory.reduce((prev, current) => {
                 return (current.depth < prev.depth) ? current : prev;
             });
 
-            // 2. Get the new buttons from the DOM
             const showWorstRepButton = document.getElementById('showWorstRepButton');
             const showBestRepButton = document.getElementById('showBestRepButton');
 
-            // 3. Add click event listeners
+            // --- NEW --- Define colors for different highlight types
+            const STABILITY_HIGHLIGHT_COLOR = 'rgba(255, 65, 54, 0.25)';  // Semi-transparent Red
+            const DEPTH_HIGHLIGHT_COLOR = 'rgba(57, 204, 204, 0.25)'; // Semi-transparent Cyan
+
+            // MODIFIED: Function to highlight a rep on the chart now accepts a color
+            const highlightRepOnChart = (rep, color) => {
+                if (!hipChartInstance || !rep) return;
+                const startFrame = rep.startFrame - playbackOffset;
+                const endFrame = rep.endFrame - playbackOffset;
+                
+                const highlighterOptions = hipChartInstance.options.plugins.repHighlighter;
+                highlighterOptions.startFrame = startFrame;
+                highlighterOptions.endFrame = endFrame;
+                highlighterOptions.color = color; // Set the specific color for the highlight
+                hipChartInstance.update(); 
+                
+                updatePlaybackFrame(Math.max(0, startFrame));
+            };
+
+            // MODIFIED: Event listeners now call the highlight function with a specific color
             showWorstRepButton.addEventListener('click', () => {
-                // The frame index must be adjusted by the playbackOffset 
-                // because the playback data is cropped to only show the relevant reps.
-                const frameIndex = worstStabRep.startFrame - playbackOffset;
-                updatePlaybackFrame(Math.max(0, frameIndex)); // Ensure it's not a negative index
+                highlightRepOnChart(worstStabRep, STABILITY_HIGHLIGHT_COLOR);
             });
 
             showBestRepButton.addEventListener('click', () => {
-                const frameIndex = bestDepthRep.startFrame - playbackOffset;
-                updatePlaybackFrame(Math.max(0, frameIndex));
+                highlightRepOnChart(bestDepthRep, DEPTH_HIGHLIGHT_COLOR);
             });
         }
     } else {
-        resetSession(); // Reset if no reps were found
+        resetSession(); 
+    }
+}
+
+// MODIFIED: Function now also clears the highlight color
+function clearRepHighlight() {
+    if (!hipChartInstance) return;
+    const highlighterOptions = hipChartInstance.options.plugins.repHighlighter;
+    if (highlighterOptions.startFrame !== null || highlighterOptions.color !== null) {
+        highlighterOptions.startFrame = null;
+        highlighterOptions.endFrame = null;
+        highlighterOptions.color = null;
+        hipChartInstance.update();
     }
 }
 
@@ -332,6 +366,7 @@ function setupReportInteractivity() {
     hipChartInstance.canvas.addEventListener('mousedown', (e) => {
         isDraggingOnChart = true;
         if (playbackAnimationId) togglePlayback();
+        clearRepHighlight(); 
         handleChartDrag(e);
     });
     hipChartInstance.canvas.addEventListener('mousemove', (e) => {
@@ -362,7 +397,7 @@ function startPlayback() {
     
     const animate = () => {
         if (frame >= recordedWorldLandmarks.length) {
-            togglePlayback(); // Will stop the animation
+            togglePlayback(); 
             playButton.innerText = "Replay";
             return;
         }
@@ -383,6 +418,7 @@ function togglePlayback() {
             hipChartInstance.update('none');
         }
     } else {
+        clearRepHighlight(); 
         startPlayback();
     }
 }
@@ -442,6 +478,7 @@ videoUploadInput.addEventListener('change', (event) => {
 });
 playbackSlider.addEventListener('input', (e) => {
     if (playbackAnimationId) togglePlayback();
+    clearRepHighlight(); 
     updatePlaybackFrame(parseInt(e.target.value, 10));
 });
 document.addEventListener('keydown', (event) => {
