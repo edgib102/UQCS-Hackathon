@@ -18,6 +18,7 @@ const STANDING_THRESHOLD = 160;
 const SQUAT_THRESHOLD = 110;
 const KNEE_VISIBILITY_THRESHOLD = 0.65;
 const SYMMETRY_THRESHOLD = 20;
+const VALGUS_THRESHOLD = 0.0; // New threshold for knee valgus margin
 
 // ---- Main pose update function ----
 export function updatePose(results) {
@@ -28,17 +29,17 @@ export function updatePose(results) {
 
     const leftVisible = left.knee.visibility > KNEE_VISIBILITY_THRESHOLD;
     const rightVisible = right.knee.visibility > KNEE_VISIBILITY_THRESHOLD;
+    
+    // If both knees are not visible, don't update pose
+    if (!leftVisible || !rightVisible) return;
 
-    const leftKneeAngle = leftVisible ? calculateAngle(left.hip, left.knee, left.ankle) : null;
-    const rightKneeAngle = rightVisible ? calculateAngle(right.hip, right.knee, right.ankle) : null;
+    const leftKneeAngle = calculateAngle(left.hip, left.knee, left.ankle);
+    const rightKneeAngle = calculateAngle(right.hip, right.knee, right.ankle);
 
-    symmetry = (leftKneeAngle && rightKneeAngle) ? Math.abs(leftKneeAngle - rightKneeAngle) : null;
+    symmetry = Math.abs(leftKneeAngle - rightKneeAngle);
     const kneeValgus = checkKneeValgus(left, right, leftVisible, rightVisible);
 
-    const visibleAngles = [leftKneeAngle, rightKneeAngle].filter(a => a !== null);
-    if (visibleAngles.length === 0) return;
-
-    const avgAngle = visibleAngles.reduce((a, b) => a + b, 0) / visibleAngles.length;
+    const avgAngle = (leftKneeAngle + rightKneeAngle) / 2;
 
     rangeOfMotion.min = Math.min(rangeOfMotion.min ?? avgAngle, avgAngle);
     rangeOfMotion.max = Math.max(rangeOfMotion.max ?? avgAngle, avgAngle);
@@ -46,10 +47,10 @@ export function updatePose(results) {
 
     // ---- Rep Counting FSM ----
     const now = performance.now();
-    if (repState === 'UP' && avgAngle < SQUAT_THRESHOLD) {
+    if (repState === 'UP' && leftKneeAngle < SQUAT_THRESHOLD && rightKneeAngle < SQUAT_THRESHOLD) {
         repState = 'DOWN';
         repStartTime = now;
-    } else if (repState === 'DOWN' && avgAngle > STANDING_THRESHOLD) {
+    } else if (repState === 'DOWN' && leftKneeAngle > STANDING_THRESHOLD && rightKneeAngle > STANDING_THRESHOLD) {
         repCount++;
         repState = 'UP';
         
@@ -98,8 +99,10 @@ export function resetPoseStats() {
 // ---- Helper Functions ----
 function checkKneeValgus(left, right, leftVisible, rightVisible) {
     if (!leftVisible || !rightVisible) return false;
-    const leftValgus = left.knee.x < left.ankle.x;
-    const rightValgus = right.knee.x > right.ankle.x;
+    // Check if left knee is inside the ankle, plus a margin
+    const leftValgus = left.knee.x < left.ankle.x - VALGUS_THRESHOLD;
+    // Check if right knee is inside the ankle, plus a margin
+    const rightValgus = right.knee.x > right.ankle.x + VALGUS_THRESHOLD;
     return leftValgus || rightValgus;
 }
 
