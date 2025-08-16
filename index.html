@@ -25,6 +25,15 @@
         </header>
 
         <div id="startView">
+            <div class="card" style="flex-basis: 100%; text-align: left;">
+                <h3>How to Get the Best Results</h3>
+                <ul>
+                    <li><strong>Positioning:</strong> Stand 2-3 meters from your camera.</li>
+                    <li><strong>Visibility:</strong> Make sure your entire body, from head to feet, is visible in the frame.</li>
+                    <li><strong>Clothing:</strong> Wear clothing that contrasts with your background.</li>
+                    <li><strong>Lighting:</strong> Ensure the room is well-lit from the front.</li>
+                </ul>
+            </div>
             <div class="card">
                 <h2>Live Analysis</h2>
                 <p>Get a detailed report on your squat form. Your session will be recorded.</p>
@@ -146,6 +155,10 @@
                     <div class="button-group">
                         <button id="playButton">Play 3D Reps</button>
                         <input type="range" id="playbackSlider" value="0" style="display: none; width: 150px; vertical-align: middle; margin: 0 10px;">
+                        
+                        <button id="showWorstRepButton" class="button" style="background-color: #FF4136;">Show Worst Stability</button>
+                        <button id="showBestRepButton" class="button" style="background-color: #39CCCC;">Show Deepest Squat</button>
+
                         <a id="downloadButton" class="button" download="squat_session.webm">Download Video</a>
                         <button id="resetButton">Go Again</button>
                     </div>

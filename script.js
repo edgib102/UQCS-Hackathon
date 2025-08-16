@@ -43,6 +43,8 @@ let currentVideoBlobUrl = null;
 let downloadBlobUrl = null;
 let isDraggingOnChart = false;
 let finalRepHistory = [];
+let repCounter = 0; 
+let squatState = 'up';
 
 // --- Landmark Filters ---
 let screenLandmarkFilters = {};
@@ -111,6 +113,27 @@ function onResults(results) {
 
         document.getElementById('depth').innerText = stats.liveDepth ? `${stats.liveDepth.toFixed(0)}°` : 'N/A';
         document.getElementById('symmetry').innerText = stats.liveSymmetry ? `${stats.liveSymmetry.toFixed(0)}°` : 'N/A';
+
+        const depthEl = document.getElementById('depth');
+        const symmetryEl = document.getElementById('symmetry');
+        let depthText = 'N/A';
+        if (stats.liveDepth) {
+            let quality = '';
+            if (stats.liveDepth < 95) quality = ' (Excellent)';
+            else if (stats.liveDepth < 110) quality = ' (Good)';
+            else if (stats.liveDepth < 150) quality = ' (Shallow)';
+            depthText = `${stats.liveDepth.toFixed(0)}°${quality}`;
+
+            if (squatState === 'up' && stats.liveDepth < 110) { // SQUAT_THRESHOLD
+                squatState = 'down';
+            } else if (squatState === 'down' && stats.liveDepth > 150) { // A bit less than STANDING_THRESHOLD
+                squatState = 'up';
+                repCounter++;
+                document.getElementById('rep-quality').innerText = `REPS: ${repCounter}`; // Update the STATUS field
+            }
+        }
+        depthEl.innerText = depthText;
+        symmetryEl.innerText = stats.liveSymmetry ? `${stats.liveSymmetry.toFixed(0)}°` : 'N/A';
     }
 }
 
@@ -125,8 +148,23 @@ function drawFrame(results) {
     canvasCtx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
     canvasCtx.drawImage(videoElement, 0, 0, outputCanvas.width, outputCanvas.height);
 
+
     if (results.poseLandmarks) {
-        drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#DDDDDD', lineWidth: 4 });
+        // Get live stats again, or pass them into drawFrame
+        const stats = getLivePoseStats(results.poseLandmarks, recordedWorldLandmarks[recordedWorldLandmarks.length-1]);
+
+        const legConnections = [[23, 25], [25, 27], [24, 26], [26, 28]]; // L-Hip/Knee, L-Knee/Ankle etc.
+        const valgusColor = '#FF4136'; // Bright Red
+        const defaultColor = '#DDDDDD';
+
+        // Draw all connections except legs first
+        const nonLegConnections = POSE_CONNECTIONS.filter(c => !legConnections.some(lc => lc.join(',') === c.join(',')));
+        drawConnectors(canvasCtx, results.poseLandmarks, nonLegConnections, { color: defaultColor, lineWidth: 4 });
+
+        // Now draw leg connections with conditional color
+        const legColor = stats.kneeValgus ? valgusColor : defaultColor;
+        drawConnectors(canvasCtx, results.poseLandmarks, legConnections, { color: legColor, lineWidth: 6 }); // Thicker line
+
         drawLandmarks(canvasCtx, results.poseLandmarks, { color: '#00CFFF', lineWidth: 2 });
     }
     canvasCtx.restore();
@@ -217,6 +255,37 @@ function stopSession() {
         
         setupReportInteractivity();
         updatePlaybackFrame(0);
+
+        if (finalRepHistory.length > 0) {
+            // Find the rep with the most knee valgus (worst stability)
+            const worstStabRep = finalRepHistory.reduce((prev, current) => {
+                const prevValgus = Math.max(prev.maxLeftValgus, prev.maxRightValgus);
+                const currentValgus = Math.max(current.maxLeftValgus, current.maxRightValgus);
+                return (currentValgus > prevValgus) ? current : prev;
+            });
+
+            // Find the rep with the smallest angle (deepest squat)
+            const bestDepthRep = finalRepHistory.reduce((prev, current) => {
+                return (current.depth < prev.depth) ? current : prev;
+            });
+
+            // 2. Get the new buttons from the DOM
+            const showWorstRepButton = document.getElementById('showWorstRepButton');
+            const showBestRepButton = document.getElementById('showBestRepButton');
+
+            // 3. Add click event listeners
+            showWorstRepButton.addEventListener('click', () => {
+                // The frame index must be adjusted by the playbackOffset 
+                // because the playback data is cropped to only show the relevant reps.
+                const frameIndex = worstStabRep.startFrame - playbackOffset;
+                updatePlaybackFrame(Math.max(0, frameIndex)); // Ensure it's not a negative index
+            });
+
+            showBestRepButton.addEventListener('click', () => {
+                const frameIndex = bestDepthRep.startFrame - playbackOffset;
+                updatePlaybackFrame(Math.max(0, frameIndex));
+            });
+        }
     } else {
         resetSession(); // Reset if no reps were found
     }
@@ -331,6 +400,8 @@ function resetSession() {
     playbackOffset = 0;
     recordedChunks = [];
     finalRepHistory = [];
+    repCounter = 0;
+    squatState = 'up';
     [recordedWorldLandmarks, recordedPoseLandmarks, hipHeightData, symmetryData, valgusData] = [[], [], [], [], []];
     
     Object.values(screenLandmarkFilters).forEach(f => f.reset());
@@ -354,6 +425,10 @@ function resetSession() {
     downloadButton.href = '#';
     
     ['depth', 'symmetry'].forEach(stat => document.getElementById(stat).innerText = 'N/A');
+
+    document.getElementById('rep-quality').innerText = 'LIVE';
+
+    
 }
 
 // --- Event Listeners ---
