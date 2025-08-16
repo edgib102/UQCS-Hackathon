@@ -9,6 +9,35 @@ const repCounterElement = document.getElementById('rep-counter');
 const squatDepthElement = document.getElementById('squat-depth');
 const pose3dCanvas = document.getElementById('pose3dCanvas');
 
+// ---- Define landmark groups (indices from MediaPipe Pose) ----
+const LEFT_LANDMARKS = [11, 13, 15, 23, 25, 27];   // shoulder, elbow, wrist, hip, knee, ankle
+const RIGHT_LANDMARKS = [12, 14, 16, 24, 26, 28];
+const MID_LANDMARKS = [];             // nose, eyes, ears, etc. (adjust if needed)
+
+// ---- Define colour scheme ----
+const LEFT_COLOR = '#00CFFF';   // green
+const MID_COLOR = '#DDDDDD';  // blue
+const RIGHT_COLOR = '#FF9E00';    // red
+
+// ---- Define connector groups (pairs of landmark indices) ----
+const LEFT_CONNECTIONS = [
+  [11, 13], [13, 15],   // left arm
+  [23, 25], [25, 27],   // left leg
+  [11, 23]              // left torso
+];
+
+const RIGHT_CONNECTIONS = [
+  [12, 14], [14, 16],   // right arm
+  [24, 26], [26, 28],   // right leg
+  [12, 24],              // right torso
+// torso diagonals
+];
+
+const MID_CONNECTIONS = [
+  [11, 12], // shoulders
+  [23, 24], // hips
+];
+
 // New stat elements
 const symmetryElement = document.getElementById('symmetry');
 const romElement = document.getElementById('rom');
@@ -41,8 +70,31 @@ function onResults(results) {
     canvasCtx.drawImage(videoElement, 0, 0, outputCanvas.width, outputCanvas.height);
 
     if (results.poseLandmarks) {
-        drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
-        drawLandmarks(canvasCtx, results.poseLandmarks, { color: '#FF0000', lineWidth: 2 });
+        drawConnectors(canvasCtx, results.poseLandmarks, LEFT_CONNECTIONS, {
+            color: LEFT_COLOR, lineWidth: 4
+        });
+        drawLandmarks(canvasCtx,
+            LEFT_LANDMARKS.map(i => results.poseLandmarks[i]),
+            { color: LEFT_COLOR, lineWidth: 2 }
+        );
+
+        // Right side
+        drawConnectors(canvasCtx, results.poseLandmarks, RIGHT_CONNECTIONS, {
+            color: RIGHT_COLOR, lineWidth: 4
+        });
+        drawLandmarks(canvasCtx,
+            RIGHT_LANDMARKS.map(i => results.poseLandmarks[i]),
+            { color: RIGHT_COLOR, lineWidth: 2 }
+        );
+
+        // Middle
+        drawConnectors(canvasCtx, results.poseLandmarks, MID_CONNECTIONS, {
+            color: MID_COLOR, lineWidth: 4
+        });
+        drawLandmarks(canvasCtx,
+            MID_LANDMARKS.map(i => results.poseLandmarks[i]),
+            { color: MID_COLOR, lineWidth: 2 }
+        );
 
         updatePose(results);
         const { repCount, squatDepthReached, symmetry, rangeOfMotion, depth, kneeValgus } = getPoseStats();
