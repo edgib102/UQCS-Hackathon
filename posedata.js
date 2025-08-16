@@ -18,7 +18,7 @@ const STANDING_THRESHOLD = 160;
 const SQUAT_THRESHOLD = 110;
 const KNEE_VISIBILITY_THRESHOLD = 0.65;
 const SYMMETRY_THRESHOLD = 20;
-const VALGUS_THRESHOLD = 0.0; // New threshold for knee valgus margin
+const VALGUS_THRESHOLD = 0.02; // New threshold for knee valgus margin
 
 // ---- Main pose update function ----
 export function updatePose(results) {
