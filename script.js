@@ -375,14 +375,28 @@ function generateReport() {
     }
 
     const avgDepth = repHistory.reduce((s, r) => s + r.depth, 0) / repHistory.length;
-    const avgSymmetry = repHistory.reduce((s, r) => s + (r.symmetry || 0), 0) / repHistory.length;
+    
+    // --- MODIFICATION START ---
+    // Filter out null/undefined values from the graph data before averaging.
+    const validSymmetryData = symmetryData.filter(s => s !== null && s !== undefined);
+    // Calculate the average of the graphed symmetry percentage values.
+    const avgSymmetry = validSymmetryData.length > 0
+        ? validSymmetryData.reduce((s, v) => s + v, 0) / validSymmetryData.length
+        : 0;
+    // --- MODIFICATION END ---
+    
     const valgusCount = repHistory.filter(r => r.kneeValgus).length;
     const qualityScores = { "GOOD": 3, "OK": 2, "BAD": 1 };
     const avgQuality = repHistory.reduce((s, r) => s + qualityScores[r.quality], 0) / repHistory.length;
     const overallQuality = avgQuality > 2.5 ? "Excellent" : avgQuality > 1.5 ? "Good" : "Needs Work";
     document.getElementById('report-quality-overall').innerText = overallQuality;
     document.getElementById('report-depth-avg').innerText = `${avgDepth.toFixed(0)}°`;
-    document.getElementById('report-symmetry-avg').innerText = `${avgSymmetry.toFixed(0)}°`;
+    
+    // --- MODIFICATION ---
+    // Update the text to display the new average as a percentage.
+    document.getElementById('report-symmetry-avg').innerText = `${avgSymmetry.toFixed(0)}%`;
+    // --- MODIFICATION END ---
+    
     document.getElementById('report-valgus-count').innerText = `${valgusCount} of ${SQUAT_TARGET} reps`;
     
     const firstValidHipHeight = hipHeightData.find(h => h !== null);
