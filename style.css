@@ -80,8 +80,23 @@ button:disabled {
 #startView .card { flex: 1; min-width: 280px; text-align: center; }
 #videoUpload { display: none; }
 
-.main-content { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-.video-container { position: relative; width: 100%; aspect-ratio: 4 / 3; }
+.main-content {
+    display: grid;
+    grid-template-columns: 1fr; /* Set to single column for centering */
+    justify-items: center; /* Horizontally center grid items */
+    margin-bottom: 20px; /* Clean gap to the stats boxes */
+}
+.video-container {
+    position: relative;
+    width: 100%;
+    max-width: 717px;
+    aspect-ratio: 16 / 9;
+}
+/* Hide the live 3D pose container to close the large gap */
+#sessionView .main-content .video-container:last-child {
+    display: none;
+}
+
 video, .output-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 8px; }
 .loading { display: flex; flex-direction: column; justify-content: center; align-items: center; background: #252525; border-radius: 8px; position: absolute; inset: 0;}
 .spinner { border: 4px solid rgba(243, 243, 243, 0.3); border-top: 4px solid #00CFFF; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
@@ -164,7 +179,7 @@ video, .output-canvas { position: absolute; top: 0; left: 0; width: 100%; height
 /* Responsive Design */
 @media (max-width: 900px) {
     .report-layout-grid { grid-template-columns: 1fr; }
-    .main-content { grid-template-columns: 1fr; }
+    /* The main-content is already single-column, so no rule needed here */
 }
 @media (max-width: 600px) {
     .report-summary { flex-direction: column; text-align: center; }
