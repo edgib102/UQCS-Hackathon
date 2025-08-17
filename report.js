@@ -82,8 +82,9 @@ export function processAndRenderReport(sessionData) {
     // --- Data Cropping ---
     const firstSquatStartFrame = finalRepHistory[0].startFrame;
     const lastSquatEndFrame = finalRepHistory[finalRepHistory.length - 1].endFrame;
-    const cropStartFrame = Math.max(0, firstSquatStartFrame - PLAYBACK_FPS);
-    const cropEndFrame = Math.min(frameCounter, lastSquatEndFrame + PLAYBACK_FPS);
+    const bufferFrames = Math.round(0.1 * PLAYBACK_FPS);
+    const cropStartFrame = Math.max(0, firstSquatStartFrame - bufferFrames);
+    const cropEndFrame = Math.min(frameCounter, lastSquatEndFrame + bufferFrames);
 
     const playbackOffset = cropStartFrame;
     recordedWorldLandmarks = recordedWorldLandmarks.slice(cropStartFrame, cropEndFrame);

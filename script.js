@@ -440,12 +440,14 @@ function updatePlaybackFrame(frame) {
 }
 
 function startPlayback() {
-    if (playbackAnimationId) cancelAnimationFrame(playbackAnimationId);
+    if (playbackAnimationId) clearTimeout(playbackAnimationId);
     let frame = parseInt(playbackSlider.value, 10);
     if (frame >= recordedWorldLandmarks.length - 1) frame = 0;
     playButton.disabled = true;
     playButton.innerText = "Playing...";
     
+    const PLAYBACK_FPS = 20; // Slower playback speed
+
     const animate = () => {
         if (frame >= recordedWorldLandmarks.length) {
             togglePlayback(); 
@@ -453,14 +455,14 @@ function startPlayback() {
             return;
         }
         updatePlaybackFrame(frame++);
-        playbackAnimationId = requestAnimationFrame(animate);
+        playbackAnimationId = setTimeout(animate, 1000 / PLAYBACK_FPS);
     };
     animate();
 }
 
 function togglePlayback() {
     if (playbackAnimationId) {
-        cancelAnimationFrame(playbackAnimationId);
+        clearTimeout(playbackAnimationId);
         playbackAnimationId = null;
         playButton.disabled = false;
         playButton.innerText = "Play 3D Reps";
@@ -478,7 +480,7 @@ function resetSession() {
     reportView.style.display = 'none';
     sessionView.style.display = 'none';
     startView.style.display = 'flex';
-    if (playbackAnimationId) cancelAnimationFrame(playbackAnimationId);
+    if (playbackAnimationId) clearTimeout(playbackAnimationId);
     if (currentVideoBlobUrl) URL.revokeObjectURL(currentVideoBlobUrl);
     if (downloadBlobUrl) URL.revokeObjectURL(downloadBlobUrl);
     
