@@ -1,7 +1,7 @@
 // script.js
 
 import { getLiveFormState, getLandmarkProxy, calculateAngle, calculateValgusState } from "./posedata.js";
-import { createLiveScene, createPlaybackScene } from "./pose3d.js";
+import { createPlaybackScene } from "./pose3d.js"; // Removed createLiveScene
 import { LandmarkFilter } from "./filter.js";
 import { processAndRenderReport } from "./report.js";
 
@@ -36,7 +36,9 @@ let valgusData = [];
 let hipChartInstance;
 let isSessionRunning = false;
 let isProcessingUpload = false;
-let liveScene, playbackScene;
+let isCalibrating = false; 
+// REMOVED: liveScene is no longer used
+let playbackScene;
 let playbackAnimationId = null;
 let frameCounter = 0;
 let playbackOffset = 0;
@@ -70,8 +72,9 @@ pose.onResults(onResults);
 // --- Camera ---
 const camera = new Camera(videoElement, {
     onFrame: async () => {
-        if (!isSessionRunning) return;
-        await pose.send({ image: videoElement });
+        if (isCalibrating || isSessionRunning) {
+            await pose.send({ image: videoElement });
+        }
     },
     width: 640,
     height: 480
@@ -79,22 +82,46 @@ const camera = new Camera(videoElement, {
 
 // --- Main Application Logic ---
 function onResults(results) {
-    if (!isSessionRunning || !videoElement.videoWidth) return;
+    if (!videoElement.videoWidth) return;
+    drawFrame(results, false); 
+
+    const cueElement = document.getElementById('rep-quality');
+
+    if (isCalibrating && !isProcessingUpload) {
+        const lm = results.poseLandmarks;
+
+        if (!lm) {
+            cueElement.innerText = "STAND IN FRAME";
+            return;
+        }
+
+        const feetVisible = (lm[31]?.visibility > 0.8 && lm[32]?.visibility > 0.8);
+        const shouldersVisible = (lm[11]?.visibility > 0.8 && lm[12]?.visibility > 0.8);
+
+        if (!feetVisible) {
+            cueElement.innerText = "MOVE FURTHER BACK";
+        } else if (!shouldersVisible) {
+            cueElement.innerText = "CENTER YOURSELF";
+        } else {
+            cueElement.innerText = "GREAT! HOLD STILL...";
+            isCalibrating = false;
+            setTimeout(startRecording, 1000);
+        }
+        return; 
+    }
+
+    if (!isSessionRunning) return;
     frameCounter++;
 
     const filteredLandmarks = results.poseLandmarks?.map((lm, i) => lm ? screenLandmarkFilters[i].filter(lm) : null);
     const filteredWorldLandmarks = results.poseWorldLandmarks?.map((lm, i) => lm ? worldLandmarkFilters[i].filter(lm) : null);
     
-    // --- MODIFIED --- Use the new master analysis function
     const formState = getLiveFormState(filteredLandmarks, filteredWorldLandmarks);
     const { stats } = formState;
 
-    // Use a simplified version for the 2D canvas overlay
     drawFrame({ ...results, poseLandmarks: filteredLandmarks }, stats.kneeValgus);
 
     if (filteredLandmarks && filteredWorldLandmarks) {
-        // --- MODIFIED --- Pass the full formState to the 3D scene
-        liveScene.update(filteredWorldLandmarks, formState);
         recordedWorldLandmarks.push(JSON.parse(JSON.stringify(filteredWorldLandmarks)));
         recordedPoseLandmarks.push(JSON.parse(JSON.stringify(filteredLandmarks)));
 
@@ -128,40 +155,37 @@ function onResults(results) {
             else if (stats.liveDepth < 150) quality = ' (Shallow)';
             depthText = `${stats.liveDepth.toFixed(0)}°${quality}`;
 
-            if (squatState === 'up' && stats.liveDepth < 110) { // SQUAT_THRESHOLD
+            if (squatState === 'up' && stats.liveDepth < 110) { 
                 squatState = 'down';
-            } else if (squatState === 'down' && stats.liveDepth > 150) { // A bit less than STANDING_THRESHOLD
+            } else if (squatState === 'down' && stats.liveDepth > 150) {
                 squatState = 'up';
                 repCounter++;
-                document.getElementById('rep-quality').innerText = `REPS: ${repCounter}`; // Update the STATUS field
             }
         }
         depthEl.innerText = depthText;
         symmetryEl.innerText = stats.liveSymmetry ? `${stats.liveSymmetry.toFixed(0)}°` : 'N/A';
 
-        const cueElement = document.getElementById('rep-quality'); 
-
         if (stats.kneeValgus) {
             cueElement.innerText = 'PUSH KNEES OUT';
-            cueElement.style.color = '#FF4136';
+            cueElement.style.color = '#f87171'; // red-400
         } else if (stats.liveDepth && stats.liveDepth < 110) { 
             cueElement.innerText = 'GOOD DEPTH';
-            cueElement.style.color = '#39CCCC';
+            cueElement.style.color = '#5eead4'; // teal-300
         } else {
             if (squatState === 'up') {
                 cueElement.innerText = 'LIVE';
-                cueElement.style.color = 'white'; 
+                cueElement.style.color = '#a5b4fc'; // indigo-300
             }
         }
     }
 }
 
-// --- MODIFIED --- Accepts kneeValgus boolean for simple 2D overlay coloring
 function drawFrame(results, hasKneeValgus) {
     if (loadingElement.style.display !== 'none') {
         loadingElement.style.display = 'none';
         videoElement.style.display = 'block';
     }
+    if (!canvasCtx) return;
     outputCanvas.width = videoElement.videoWidth;
     outputCanvas.height = videoElement.videoHeight;
     canvasCtx.save();
@@ -171,8 +195,8 @@ function drawFrame(results, hasKneeValgus) {
 
     if (results.poseLandmarks) {
         const legConnections = [[23, 25], [25, 27], [24, 26], [26, 28]]; 
-        const valgusColor = '#FF4136'; 
-        const defaultColor = '#DDDDDD';
+        const valgusColor = '#ef4444'; // red-500
+        const defaultColor = '#9ca3af'; // gray-400
 
         const nonLegConnections = POSE_CONNECTIONS.filter(c => !legConnections.some(lc => lc.join(',') === c.join(',')));
         drawConnectors(canvasCtx, results.poseLandmarks, nonLegConnections, { color: defaultColor, lineWidth: 4 });
@@ -180,24 +204,37 @@ function drawFrame(results, hasKneeValgus) {
         const legColor = hasKneeValgus ? valgusColor : defaultColor;
         drawConnectors(canvasCtx, results.poseLandmarks, legConnections, { color: legColor, lineWidth: 6 }); 
 
-        drawLandmarks(canvasCtx, results.poseLandmarks, { color: '#00CFFF', lineWidth: 2 });
+        drawLandmarks(canvasCtx, results.poseLandmarks, { color: '#60a5fa', lineWidth: 2 }); // blue-400
     }
     canvasCtx.restore();
 }
 
 // --- Session & Playback Control ---
+
 async function startSession() {
-    if (!liveScene) liveScene = createLiveScene(document.getElementById('pose3dCanvas'));
     if (!canvasCtx) canvasCtx = outputCanvas.getContext('2d');
+    
     resetSession();
-    isSessionRunning = true;
+
     isProcessingUpload = false;
+    isCalibrating = true;
+
     startView.style.display = 'none';
     reportView.style.display = 'none';
     sessionView.style.display = 'block';
     loadingElement.style.display = 'flex';
     downloadButton.style.display = 'inline-block';
+    
+    finishButton.disabled = true; 
+    document.getElementById('rep-quality').innerText = 'POSITIONING...';
+
     await camera.start();
+}
+
+function startRecording() {
+    isSessionRunning = true;
+    finishButton.disabled = false;
+    document.getElementById('rep-quality').innerText = 'LIVE';
 
     const stream = outputCanvas.captureStream(30);
     mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
@@ -213,10 +250,10 @@ async function startSession() {
 
 function startUploadSession(file) {
     resetSession();
-    if (!liveScene) liveScene = createLiveScene(document.getElementById('pose3dCanvas'));
     if (!canvasCtx) canvasCtx = outputCanvas.getContext('2d');
     isSessionRunning = true;
     isProcessingUpload = true;
+    isCalibrating = false;
     startView.style.display = 'none';
     reportView.style.display = 'none';
     sessionView.style.display = 'block';
@@ -245,6 +282,7 @@ async function processVideoFrames() {
 
 function stopSession() {
     isSessionRunning = false;
+    isCalibrating = false;
     if (!isProcessingUpload && mediaRecorder?.state === 'recording') mediaRecorder.stop();
     if (!isProcessingUpload) camera.stop();
 
@@ -283,8 +321,8 @@ function stopSession() {
             const showWorstRepButton = document.getElementById('showWorstRepButton');
             const showBestRepButton = document.getElementById('showBestRepButton');
 
-            const STABILITY_HIGHLIGHT_COLOR = 'rgba(255, 65, 54, 0.25)';
-            const DEPTH_HIGHLIGHT_COLOR = 'rgba(57, 204, 204, 0.25)';
+            const STABILITY_HIGHLIGHT_COLOR = 'rgba(239, 68, 68, 0.25)';
+            const DEPTH_HIGHLIGHT_COLOR = 'rgba(20, 184, 166, 0.25)';
 
             const highlightRepOnChart = (rep, color) => {
                 if (!hipChartInstance || !rep) return;
@@ -328,8 +366,8 @@ function setupReportInteractivity() {
     const originalDatasetColors = hipChartInstance.data.datasets.map(ds => ({
         borderColor: ds.borderColor, backgroundColor: ds.backgroundColor,
     }));
-    const mutedBorderColor = '#555555';
-    const mutedBackgroundColor = 'rgba(85, 85, 85, 0.1)';
+    const mutedBorderColor = '#4b5563'; // gray-600
+    const mutedBackgroundColor = 'rgba(75, 85, 99, 0.1)';
 
     const setChartFocus = (focusIndex = -1) => {
         if (!hipChartInstance) return;
@@ -376,14 +414,11 @@ function setupReportInteractivity() {
     hipChartInstance.canvas.addEventListener('mouseleave', stopDragging);
 }
 
-// --- MODIFIED --- This function now also gets and passes formState for playback visualizations
 function updatePlaybackFrame(frame) {
     if (!playbackScene || !recordedWorldLandmarks[frame] || !hipChartInstance || !recordedPoseLandmarks[frame]) return;
 
-    // --- NEW --- Get the form state for the specific frame in the past
     const formState = getLiveFormState(recordedPoseLandmarks[frame], recordedWorldLandmarks[frame]);
 
-    // --- MODIFIED --- Pass the historical formState to the playback scene
     playbackScene.update(recordedWorldLandmarks[frame], formState);
     
     playbackSlider.value = frame;
@@ -435,6 +470,7 @@ function resetSession() {
     if (downloadBlobUrl) URL.revokeObjectURL(downloadBlobUrl);
     
     isSessionRunning = false;
+    isCalibrating = false;
     frameCounter = 0;
     playbackOffset = 0;
     recordedChunks = [];
@@ -460,9 +496,10 @@ function resetSession() {
     if (scoreCircle) scoreCircle.style.setProperty('--p', 0);
     document.getElementById('report-score-value').innerText = '0';
     playButton.disabled = false;
+    finishButton.disabled = false;
     playButton.innerText = "Play 3D Reps";
     
-    toggleDepthLaser.checked = true; // Set to "on" by default
+    toggleDepthLaser.checked = true; 
     if (playbackScene) {
         playbackScene.setDepthLaserVisibility(true);
     }
@@ -483,7 +520,9 @@ toggleDepthLaser.addEventListener('change', () => {
     if (playbackScene) {
         playbackScene.setDepthLaserVisibility(toggleDepthLaser.checked);
         const currentFrame = parseInt(playbackSlider.value, 10);
-        updatePlaybackFrame(currentFrame); // Force a re-render to show the change immediately
+        if(!isNaN(currentFrame)) {
+            updatePlaybackFrame(currentFrame); 
+        }
     }
 });
 videoUploadInput.addEventListener('change', (event) => {

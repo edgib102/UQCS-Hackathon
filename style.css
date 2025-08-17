@@ -146,7 +146,8 @@ video, .output-canvas { position: absolute; top: 0; left: 0; width: 100%; height
   --p: 0; --b: 16px; --c: #00CFFF; --w: 150px;
   width: var(--w); aspect-ratio: 1; position: relative; display: inline-grid;
   place-content: center; font-size: 2.6em; font-weight: bold;
-  transition: --p 1s; animation: grow 0.5s;
+  transition: --p 1.5s;
+  animation: grow 0.5s;
 }
 @keyframes grow { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .score-circle:before, .score-circle:after { content: ""; position: absolute; border-radius: 50%; }
@@ -155,7 +156,12 @@ video, .output-canvas { position: absolute; top: 0; left: 0; width: 100%; height
   -webkit-mask: radial-gradient(farthest-side,#0000 calc(99% - var(--b)),#000 calc(100% - var(--b)));
           mask: radial-gradient(farthest-side,#0000 calc(99% - var(--b)),#000 calc(100% - var(--b)));
 }
-.score-circle:after { inset: calc(50% - var(--b)/2); background: var(--c); transform: rotate(calc(var(--p) * 3.6deg)) translateY(calc(50% - var(--w)/2)); transition: transform 1s; }
+.score-circle:after {
+    inset: calc(50% - var(--b)/2);
+    background: var(--c);
+    transform: rotate(calc(var(--p) * 3.6deg)) translateY(calc(50% - var(--w)/2));
+    /* transition: transform 1.5s; -- This line was removed */
+}
 
 .report-breakdown { margin: 0; border: 0; padding: 0; }
 .breakdown-item { margin-bottom: 15px; padding: 15px; background-color: #2a2a2a; border-radius: 8px; }

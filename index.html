@@ -3,11 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Squat Fix</title>
-    <link rel="stylesheet" href="style.css">
+    <title>AI Squat Fix - Rep Master</title>
+    
+    <!-- Tailwind CSS for modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Inter for UI, Roboto Mono for data -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- Import map for Three.js -->
     <script type="importmap">
     {
         "imports": {
@@ -16,165 +22,244 @@
         }
     }
     </script>
+    <style>
+        /* Custom styles to complement Tailwind */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #030712; /* gray-950 */
+            color: #d1d5db; /* gray-300 */
+        }
+        .font-data {
+            font-family: 'Roboto Mono', monospace;
+        }
+        /* Custom progress circle for the score report */
+        @property --p {
+            syntax: '<number>';
+            inherits: true;
+            initial-value: 0;
+        }
+        .score-circle {
+            --p: 0;
+            --b: 8px; /* border thickness */
+            --c: #f3f4f6; /* gray-100 */
+            --w: 160px; /* width */
+            width: var(--w);
+            aspect-ratio: 1;
+            position: relative;
+            display: inline-grid;
+            place-content: center;
+            font-size: 2.75rem;
+            font-weight: 700;
+            color: #f3f4f6;
+            transition: --p 1.5s;
+            animation: grow 0.5s;
+        }
+        @keyframes grow {
+            from { transform: scale(0.5); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .score-circle:before {
+            content: "";
+            position: absolute;
+            border-radius: 50%;
+            inset: 0;
+            background: conic-gradient(var(--c) calc(var(--p) * 1%), #1f2937 0); /* gray-800 */
+            -webkit-mask: radial-gradient(farthest-side, #0000 calc(99% - var(--b)), #000 calc(100% - var(--b)));
+            mask: radial-gradient(farthest-side, #0000 calc(99% - var(--b)), #000 calc(100% - var(--b)));
+        }
+        /* Custom toggle switch */
+        .toggle-switch input:checked ~ .slider {
+            background-color: #a5b4fc; /* indigo-300 */
+        }
+        .toggle-switch input:checked ~ .slider:before {
+            transform: translateX(24px);
+        }
+        /* Ensure playback canvas fills its container */
+        #playbackCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
 </head>
-<body>
-    <div class="container">
-        <header>
-            <h1>Fix Your Squat</h1>
-            <p class="subtitle">AI-Powered Form Corrector</p>
+<body class="text-gray-300">
+
+    <div class="container mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
+        <!-- Header -->
+        <header class="text-center mb-10">
+            <h1 class="text-4xl sm:text-5xl font-bold text-gray-100 tracking-tight">Rep Master</h1>
+            <p class="text-lg text-gray-400 mt-2">AI-Powered Squat Analysis</p>
         </header>
 
+        <!-- Start View -->
         <div id="startView">
-            <div class="card" style="flex-basis: 100%; text-align: left;">
-                <h3>How to Get the Best Results</h3>
-                <ul>
-                    <li><strong>Positioning:</strong> Stand 2-3 meters from your camera.</li>
-                    <li><strong>Visibility:</strong> Make sure your entire body, from head to feet, is visible in the frame.</li>
-                    <li><strong>Clothing:</strong> Wear clothing that contrasts with your background.</li>
-                    <li><strong>Lighting:</strong> Ensure the room is well-lit from the front.</li>
-                </ul>
-            </div>
-            <div class="card">
-                <h2>Live Analysis</h2>
-                <p>Get a detailed report on your squat form. Your session will be recorded.</p>
-                <button id="startButton">Start Session</button>
-            </div>
-            
-            <div class="card">
-                <h2>Analyze a Video File</h2>
-                <p>Upload a video from your device to get a detailed squat form report.</p>
-                <label for="videoUpload" class="button">Choose Video File</label>
-                <input type="file" id="videoUpload" accept="video/mp4,video/webm" style="display: none;">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+                <div class="bg-gray-900 rounded-lg p-6 border border-gray-700">
+                    <h3 class="text-xl font-semibold text-white mb-4">Instructions</h3>
+                    <ul class="space-y-3 text-gray-400 list-disc list-inside">
+                        <li><strong>Positioning:</strong> Stand 2-3 meters from your camera.</li>
+                        <li><strong>Visibility:</strong> Ensure your entire body, head to feet, is visible.</li>
+                        <li><strong>Clothing:</strong> Wear clothes that contrast with your background.</li>
+                        <li><strong>Lighting:</strong> Ensure the room is well-lit from the front.</li>
+                    </ul>
+                </div>
+                <div class="bg-gray-900 rounded-lg p-6 border border-gray-700 flex flex-col justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white mb-3">Start Your Session</h2>
+                        <p class="text-gray-400 mb-6">Get a detailed report on your squat form. Choose your input method below.</p>
+                    </div>
+                    <div class="space-y-4">
+                        <button id="startButton" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-4 rounded-md transition-all transform hover:scale-[1.02]">
+                            Start Live Camera Session
+                        </button>
+                        <label for="videoUpload" class="w-full block text-center bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-md transition-all transform hover:scale-[1.02] cursor-pointer">
+                            Analyze Video File
+                        </label>
+                        <input type="file" id="videoUpload" accept="video/mp4,video/webm" class="hidden">
+                    </div>
+                </div>
             </div>
         </div>
 
+        <!-- Session View -->
         <div id="sessionView" style="display: none;">
-            <div class="main-content">
-                <div class="video-container" id="video-container">
-                    <video id="video" style="display: none;" autoplay playsinline muted></video>
-                    <canvas id="outputCanvas" class="output-canvas"></canvas>
-                    <div class="loading" id="loading">
-                        <div class="spinner"></div>
-                        <p>"Processing video..."</p>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Main Content Column -->
+                <div class="lg:col-span-2 space-y-4">
+                    <div class="relative w-full aspect-video bg-black rounded-lg overflow-hidden border border-gray-700" id="video-container">
+                        <video id="video" class="w-full h-full" autoplay playsinline muted style="display: none;"></video>
+                        <canvas id="outputCanvas" class="absolute inset-0 w-full h-full"></canvas>
+                        <div id="loading" class="absolute inset-0 bg-gray-900/80 flex flex-col items-center justify-center space-y-4 backdrop-blur-sm">
+                            <div class="w-12 h-12 border-4 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+                            <p class="text-lg font-medium">Processing video...</p>
+                        </div>
+                    </div>
+                    <!-- Status indicator moved below the video -->
+                    <div class="text-center h-8">
+                        <p id="rep-quality" class="font-data text-indigo-400 text-2xl lg:text-3xl font-bold transition-all duration-300">POSITIONING...</p>
                     </div>
                 </div>
-                <div class="video-container">
-                    <canvas id="pose3dCanvas"></canvas>
-                </div>
-            </div>
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <h3>STATUS</h3>
-                    <p id="rep-quality">LIVE</p>
-                </div>
-                <div class="stat-card">
-                    <h3>LIVE DEPTH</h3>
-                    <p id="depth">N/A</p>
-                </div>
-                <div class="stat-card">
-                    <h3>LIVE SYMMETRY</h3>
-                    <p id="symmetry">N/A</p>
-                </div>
-                 <div class="stat-card">
-                    <h3>SESSION</h3>
-                    <button id="finishButton" class="button">Finish</button>
+                <!-- Sidebar Column -->
+                <div class="space-y-6">
+                    <div class="bg-gray-900 rounded-lg p-6 border border-gray-700">
+                        <h3 class="text-lg font-bold text-white mb-4">Live Metrics</h3>
+                        <div class="space-y-4">
+                             <!-- Status removed from here -->
+                            <div class="flex justify-between items-center bg-gray-800/50 p-3 rounded-md">
+                                <span class="font-semibold text-sm text-gray-400">DEPTH</span>
+                                <p id="depth" class="font-data text-lg">N/A</p>
+                            </div>
+                            <div class="flex justify-between items-center bg-gray-800/50 p-3 rounded-md">
+                                <span class="font-semibold text-sm text-gray-400">SYMMETRY</span>
+                                <p id="symmetry" class="font-data text-lg">N/A</p>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="finishButton" class="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white font-bold py-3 px-4 rounded-md transition-transform transform hover:scale-105">
+                        Finish Session
+                    </button>
                 </div>
             </div>
         </div>
 
+        <!-- Report View -->
         <div id="reportView" style="display: none;">
-            <div class="card">
-                <h2>Session Report</h2>
-                <div class="report-main-grid"> 
-                    <div class="report-col-main">
-                        <div class="report-summary">
-                            <div class="score-container">
-                                <div class="score-circle" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-                                    <span id="report-score-value">0</span>
-                                </div>
-                                <div class="score-label">Overall Score</div>
+            <div class="space-y-8">
+                <!-- Top Section: Score, Breakdown, and 3D Playback -->
+                <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
+                    <div class="lg:col-span-3 bg-gray-900 rounded-lg p-6 border border-gray-700 flex flex-col sm:flex-row items-center sm:items-start gap-6">
+                        <div class="text-center flex-shrink-0">
+                            <div class="score-circle" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                                <span id="report-score-value" class="font-data">0</span>
                             </div>
-                            <div class="report-stats">
-                                <div class="report-grid">
-                                    <div><strong>Overall Quality:</strong> <span id="report-quality-overall"></span></div>
-                                    <div><strong>Average Depth:</strong> <span id="report-depth-avg"></span></div>
-                                    <div><strong>Average Symmetry:</strong> <span id="report-symmetry-avg"></span></div>
-                                    <div><strong>Knee Valgus:</strong> <span id="report-valgus-count"></span></div>
-                                </div>
-                            </div>
+                            <div class="mt-2 text-lg font-semibold text-gray-200">Overall Score</div>
                         </div>
-                        <div class="report-breakdown">
-                            <h3>Score Breakdown & How to Improve</h3>
-                            <div class="breakdown-item" id="breakdown-item-depth">
-                                <div class="breakdown-header">
-                                    <h4><span class="breakdown-dot depth"></span>Depth</h4>
-                                    <span id="breakdown-score-depth">0/30</span>
-                                </div>
-                                <p id="breakdown-desc-depth"></p>
-                            </div>
-                            <div class="breakdown-item" id="breakdown-item-symmetry">
-                                <div class="breakdown-header">
-                                    <h4><span class="breakdown-dot symmetry"></span>Symmetry</h4>
-                                    <span id="breakdown-score-symmetry">0/30</span>
-                                </div>
-                                <p id="breakdown-desc-symmetry"></p>
-                            </div>
-                            <div class="breakdown-item" id="breakdown-item-valgus">
-                                <div class="breakdown-header">
-                                    <h4><span class="breakdown-dot valgus"></span>Knee Stability</h4>
-                                    <span id="breakdown-score-valgus">0/20</span>
-                                </div>
-                                <p id="breakdown-desc-valgus"></p>
-                            </div>
-                            <div class="breakdown-item" id="breakdown-item-consistency">
-                                <div class="breakdown-header">
-                                    <h4><span class="breakdown-dot consistency"></span>Consistency</h4>
-                                    <span id="breakdown-score-consistency">0/20</span>
-                                </div>
-                                <p id="breakdown-desc-consistency"></p>
+                        <div class="flex-1 w-full">
+                            <h3 class="text-xl font-bold text-white mb-4">Performance Summary</h3>
+                            <div class="space-y-3 text-sm">
+                                <div class="flex justify-between"><strong>Overall Quality:</strong> <span id="report-quality-overall" class="font-data text-gray-300"></span></div>
+                                <div class="flex justify-between"><strong>Average Depth:</strong> <span id="report-depth-avg" class="font-data text-gray-300"></span></div>
+                                <div class="flex justify-between"><strong>Average Symmetry:</strong> <span id="report-symmetry-avg" class="font-data text-gray-300"></span></div>
+                                <div class="flex justify-between"><strong>Knee Valgus:</strong> <span id="report-valgus-count" class="font-data text-gray-300"></span></div>
                             </div>
                         </div>
                     </div>
-
-                    <div class="report-col-visuals">
-                        <div class="playback-container">
-                            <canvas id="playbackCanvas"></canvas>
-                             <p class="playback-text">3D PLAYBACK</p>
-                        </div>
+                    <div class="lg:col-span-2 relative w-full h-64 md:h-80 lg:h-full bg-gray-950 rounded-lg overflow-hidden border border-gray-700">
+                        <p class="absolute top-3 left-4 bg-black/50 text-white/80 text-xs font-semibold px-2 py-1 rounded-full z-10">3D PLAYBACK</p>
+                        <canvas id="playbackCanvas"></canvas>
                     </div>
                 </div>
 
-                <div class="chart-container-wrapper card">
-                    <div class="chart-container">
+                <!-- Breakdown Section -->
+                <div class="bg-gray-900 rounded-lg p-6 border border-gray-700">
+                    <h3 class="text-xl font-bold text-white mb-4">Score Breakdown & How to Improve</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="breakdown-item bg-gray-800/50 p-4 rounded-md" id="breakdown-item-depth">
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="flex items-center gap-3 font-bold"><span class="breakdown-dot h-3 w-3 rounded-full" style="background-color: #60a5fa;"></span>Depth</h4>
+                                <span id="breakdown-score-depth" class="font-data font-semibold">0/30</span>
+                            </div>
+                            <p id="breakdown-desc-depth" class="text-sm text-gray-400"></p>
+                        </div>
+                        <div class="breakdown-item bg-gray-800/50 p-4 rounded-md" id="breakdown-item-symmetry">
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="flex items-center gap-3 font-bold"><span class="breakdown-dot h-3 w-3 rounded-full" style="background-color: #fb923c;"></span>Symmetry</h4>
+                                <span id="breakdown-score-symmetry" class="font-data font-semibold">0/30</span>
+                            </div>
+                            <p id="breakdown-desc-symmetry" class="text-sm text-gray-400"></p>
+                        </div>
+                        <div class="breakdown-item bg-gray-800/50 p-4 rounded-md" id="breakdown-item-valgus">
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="flex items-center gap-3 font-bold"><span class="breakdown-dot h-3 w-3 rounded-full" style="background-color: #f87171;"></span>Knee Stability</h4>
+                                <span id="breakdown-score-valgus" class="font-data font-semibold">0/20</span>
+                            </div>
+                            <p id="breakdown-desc-valgus" class="text-sm text-gray-400"></p>
+                        </div>
+                        <div class="breakdown-item bg-gray-800/50 p-4 rounded-md" id="breakdown-item-consistency">
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="flex items-center gap-3 font-bold"><span class="breakdown-dot h-3 w-3 rounded-full" style="background-color: #5eead4;"></span>Consistency</h4>
+                                <span id="breakdown-score-consistency" class="font-data font-semibold">0/20</span>
+                            </div>
+                            <p id="breakdown-desc-consistency" class="text-sm text-gray-400"></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Chart and Controls Section -->
+                <div class="bg-gray-900 rounded-lg p-6 border border-gray-700">
+                    <div class="h-80 w-full">
                         <canvas id="hipHeightChart"></canvas>
                     </div>
+                    <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mt-6">
+                        <button id="playButton" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-5 rounded-md transition">Play 3D Reps</button>
+                        <input type="range" id="playbackSlider" value="0" class="w-full max-w-xs" style="display: none;">
+                        <button id="showWorstRepButton" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-5 rounded-md transition">Worst Stability</button>
+                        <button id="showBestRepButton" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-5 rounded-md transition">Deepest Squat</button>
+                    </div>
                 </div>
 
-                <div class="report-footer">
-                    <p>Use the 3D playback and chart to analyze your form, download the recording, or try another set.</p>
-                    <div class="button-group">
-                        <button id="playButton">Play 3D Reps</button>
-                        <input type="range" id="playbackSlider" value="0" style="display: none; width: 150px; vertical-align: middle; margin: 0 10px;">
-                        
-                        <button id="showWorstRepButton" class="button" style="background-color: #FF4136;">Show Worst Stability</button>
-                        <button id="showBestRepButton" class="button" style="background-color: #39CCCC;">Show Deepest Squat</button>
-                        
-                        <div class="toggle-container">
-                            <label for="toggleDepthLaser" class="toggle-label">Depth Plane</label>
-                            <label class="toggle-switch">
-                                <input type="checkbox" id="toggleDepthLaser" checked>
-                                <span class="slider"></span>
+                <!-- Footer Actions -->
+                <div class="text-center border-t border-gray-700 pt-6 mt-4">
+                    <p class="mb-6 text-gray-400">Analyze your form, download the recording, or go for another set.</p>
+                    <div class="flex items-center justify-center gap-x-6 gap-y-4 flex-wrap">
+                        <div class="toggle-container flex items-center gap-3">
+                            <label for="toggleDepthLaser" class="toggle-label font-medium cursor-pointer">Depth Plane</label>
+                            <label class="toggle-switch relative inline-block w-[50px] h-[26px]">
+                                <input type="checkbox" id="toggleDepthLaser" class="opacity-0 w-0 h-0" checked>
+                                <span class="slider absolute cursor-pointer inset-0 bg-gray-600 rounded-full transition-all duration-300 before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-[3px] before:bg-white before:rounded-full before:transition-all before:duration-300"></span>
                             </label>
                         </div>
-
-                        <a id="downloadButton" class="button" download="squat_session.webm">Download Video</a>
-                        <button id="resetButton">Go Again</button>
+                        <a id="downloadButton" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-5 rounded-md transition" download="squat_session.webm">Download Video</a>
+                        <button id="resetButton" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-5 rounded-md transition">Go Again</button>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -184,6 +269,7 @@
     <script src="chart.js" type="module"></script>
     <script src="pose3d.js" type="module"></script>
     <script src="posedata.js" type="module"></script>
+    <script src="report.js" type="module"></script>
     <script src="script.js" type="module"></script>
 </body>
 </html>
