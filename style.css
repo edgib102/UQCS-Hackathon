@@ -281,3 +281,28 @@ input:checked + .slider:before {
     -ms-transform: translateX(24px);
     transform: translateX(24px);
 }
+
+/* ADDED: Toast Notification Styles */
+#toast-notification {
+    visibility: hidden;
+    min-width: 250px;
+    background-color: #FF4136;
+    color: #fff;
+    text-align: center;
+    border-radius: 8px;
+    padding: 16px;
+    position: fixed;
+    z-index: 100;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 30px;
+    font-size: 16px;
+    opacity: 0;
+    transition: visibility 0.5s, opacity 0.5s, bottom 0.5s;
+}
+
+#toast-notification.show {
+    visibility: visible;
+    opacity: 1;
+    bottom: 50px;
+}

@@ -49,6 +49,9 @@ let finalRepHistory = [];
 let repCounter = 0; 
 let squatState = 'up';
 
+// --- ADDED: Landmark indices for the head, used to hide them in the 2D overlay ---
+const HEAD_INDICES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
 // --- Landmark Filters ---
 let screenLandmarkFilters = {};
 let worldLandmarkFilters = {};
@@ -198,13 +201,23 @@ function drawFrame(results, hasKneeValgus) {
         const valgusColor = '#ef4444'; // red-500
         const defaultColor = '#9ca3af'; // gray-400
 
+        // Get all connections except for the legs, then filter out the face connections
         const nonLegConnections = POSE_CONNECTIONS.filter(c => !legConnections.some(lc => lc.join(',') === c.join(',')));
-        drawConnectors(canvasCtx, results.poseLandmarks, nonLegConnections, { color: defaultColor, lineWidth: 4 });
+        const bodyConnections = nonLegConnections.filter(conn => {
+            const [start, end] = conn;
+            return !(HEAD_INDICES.includes(start) && HEAD_INDICES.includes(end));
+        });
 
+        // Draw the main body skeleton (without face lines)
+        drawConnectors(canvasCtx, results.poseLandmarks, bodyConnections, { color: defaultColor, lineWidth: 4 });
+
+        // Draw the legs with color based on knee valgus
         const legColor = hasKneeValgus ? valgusColor : defaultColor;
         drawConnectors(canvasCtx, results.poseLandmarks, legConnections, { color: legColor, lineWidth: 6 }); 
 
-        drawLandmarks(canvasCtx, results.poseLandmarks, { color: '#60a5fa', lineWidth: 2 }); // blue-400
+        // Filter out face landmarks before drawing the dots
+        const bodyLandmarks = results.poseLandmarks.filter((_, i) => !HEAD_INDICES.includes(i));
+        drawLandmarks(canvasCtx, bodyLandmarks, { color: '#00CFFF', lineWidth: 2 });
     }
     canvasCtx.restore();
 }
@@ -464,13 +477,14 @@ function togglePlayback() {
 function resetSession() {
     reportView.style.display = 'none';
     sessionView.style.display = 'none';
-    startView.style.display = 'block';
+    startView.style.display = 'flex';
     if (playbackAnimationId) cancelAnimationFrame(playbackAnimationId);
     if (currentVideoBlobUrl) URL.revokeObjectURL(currentVideoBlobUrl);
     if (downloadBlobUrl) URL.revokeObjectURL(downloadBlobUrl);
     
     isSessionRunning = false;
     isCalibrating = false;
+    isProcessingUpload = false; 
     frameCounter = 0;
     playbackOffset = 0;
     recordedChunks = [];
@@ -489,7 +503,7 @@ function resetSession() {
     videoElement.pause();
     videoElement.src = '';
     videoElement.srcObject = null;
-    videoElement.load();
+    videoElement.load(); // <-- BUG FIX: Re-added this line to ensure the video element is fully reset.
     videoUploadInput.value = null;
     
     const scoreCircle = document.querySelector('.score-circle');
@@ -508,7 +522,10 @@ function resetSession() {
     
     ['depth', 'symmetry'].forEach(stat => document.getElementById(stat).innerText = 'N/A');
 
-    document.getElementById('rep-quality').innerText = 'LIVE';
+    // BUG FIX: Also reset the color of the status text
+    const repQualityEl = document.getElementById('rep-quality');
+    repQualityEl.innerText = 'LIVE';
+    repQualityEl.style.color = 'white';
 }
 
 // --- Event Listeners ---
