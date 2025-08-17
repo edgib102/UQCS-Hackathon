@@ -82,7 +82,7 @@ export function processAndRenderReport(sessionData) {
     const finalRepHistory = analyzeSession(recordedPoseLandmarks, recordedWorldLandmarks);
     if (finalRepHistory.length === 0) {
         console.error("No valid squats were detected in the session.");
-        return null; // Return null instead of showing an alert
+        return null; // This null value is what the script.js check relies on
     }
 
     // --- Data Cropping ---

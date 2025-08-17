@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Squat Fix - Rep Master</title>
+    <title>Squat Daddy - AI Form Coach</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-    
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -141,8 +142,8 @@
             <video autoplay muted loop id="video-background" src="https://assets.mixkit.co/videos/preview/mixkit-man-in-a-bunker-doing-squats-42534-large.mp4"></video>
             
             <div class="hero-content fade-in">
-                <h1 class="text-5xl md:text-6xl font-bold text-white tracking-tight">Rep Master</h1>
-                <p class="text-lg text-gray-300 mt-4 max-w-2xl mx-auto">Perfect your form, prevent injury, and unlock your true strength with real-time AI feedback on every squat.</p>
+                <h1 class="text-5xl md:text-6xl font-bold text-white tracking-tight">Squat Daddy</h1>
+                <p class="text-lg text-gray-300 mt-4 max-w-2xl mx-auto">Get live feedback, analytics, and coaching from the world's sexiest AI personal trainer - Daddy's got your back.</p>
                 <div class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
                     <button id="startButton" class="w-full sm:w-auto bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg transition-all transform hover:scale-105">
                         Start Live Camera Session
@@ -202,7 +203,11 @@
                     <p class="text-lg font-medium">Preparing session...</p>
                 </div>
         
-                <div class="absolute top-4 right-4 z-20 grid grid-cols-2 gap-3 text-center">
+                <div class="absolute top-4 right-4 z-20 grid grid-cols-3 gap-3 text-center">
+                    <div class="bg-black/50 p-3 rounded-lg backdrop-blur-sm border border-white/10">
+                        <span class="font-semibold text-xs text-gray-400 block">REPS</span>
+                        <p id="rep-counter" class="font-data text-xl font-bold text-white">0</p>
+                    </div>
                     <div class="bg-black/50 p-3 rounded-lg backdrop-blur-sm border border-white/10">
                         <span class="font-semibold text-xs text-gray-400 block">DEPTH</span>
                         <p id="depth" class="font-data text-xl font-bold text-white">N/A</p>
@@ -218,10 +223,13 @@
                 </div>
             </div>
         
-            <div class="mt-8">
-                <button id="finishButton" class="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white font-bold py-3 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100">
-                    Finish & View Report
-                </button>
+            <div class="mt-8 flex items-center gap-4">
+            <button id="finishButton" class="w-full sm:w-auto bg-gray-600 hover:bg-gray-700 disabled:bg-gray-600 text-white font-bold py-3 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100">
+                Finish & View Report
+            </button>
+            <button id="exitButton" class="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg transition-all transform hover:scale-105">
+                Exit
+            </button>
             </div>
         </div>
 
@@ -340,7 +348,9 @@
         </div>
     </div>
 
-    <div id="toast-notification"></div>
+    <div id="toast-notification" class="fixed bottom-5 right-5 bg-red-600 text-white py-3 px-5 rounded-lg shadow-lg opacity-0 translate-y-4 transition-all duration-300 z-50">
+        No valid squats were detected. Please try again!
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>

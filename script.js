@@ -19,6 +19,7 @@ const loadingElement = document.getElementById('loading');
 const startButton = document.getElementById('startButton');
 const finishButton = document.getElementById('finishButton');
 const resetButton = document.getElementById('resetButton');
+const exitButton = document.getElementById('exitButton');
 const downloadButton = document.getElementById('downloadButton');
 const playButton = document.getElementById('playButton');
 const toggleDepthLaser = document.getElementById('toggleDepthLaser');
@@ -363,6 +364,11 @@ function stopSession() {
             });
         }
     } else {
+        const toast = document.getElementById('toast-notification');
+        toast.classList.add('show');
+        setTimeout(() => {
+            toast.classList.remove('show');
+        }, 4000);
         resetSession(); 
     }
 }
@@ -537,6 +543,7 @@ function resetSession() {
 startButton.addEventListener('click', startSession);
 finishButton.addEventListener('click', stopSession);
 resetButton.addEventListener('click', resetSession);
+exitButton.addEventListener('click', resetSession);
 playButton.addEventListener('click', togglePlayback);
 toggleDepthLaser.addEventListener('change', () => {
     if (playbackScene) {
