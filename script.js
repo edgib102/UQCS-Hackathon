@@ -21,6 +21,7 @@ const finishButton = document.getElementById('finishButton');
 const resetButton = document.getElementById('resetButton');
 const downloadButton = document.getElementById('downloadButton');
 const playButton = document.getElementById('playButton');
+const toggleDepthLaser = document.getElementById('toggleDepthLaser');
 const videoUploadInput = document.getElementById('videoUpload');
 const playbackSlider = document.getElementById('playbackSlider');
 
@@ -460,6 +461,12 @@ function resetSession() {
     document.getElementById('report-score-value').innerText = '0';
     playButton.disabled = false;
     playButton.innerText = "Play 3D Reps";
+    
+    toggleDepthLaser.checked = true; // Set to "on" by default
+    if (playbackScene) {
+        playbackScene.setDepthLaserVisibility(true);
+    }
+    
     downloadButton.href = '#';
     
     ['depth', 'symmetry'].forEach(stat => document.getElementById(stat).innerText = 'N/A');
@@ -472,6 +479,13 @@ startButton.addEventListener('click', startSession);
 finishButton.addEventListener('click', stopSession);
 resetButton.addEventListener('click', resetSession);
 playButton.addEventListener('click', togglePlayback);
+toggleDepthLaser.addEventListener('change', () => {
+    if (playbackScene) {
+        playbackScene.setDepthLaserVisibility(toggleDepthLaser.checked);
+        const currentFrame = parseInt(playbackSlider.value, 10);
+        updatePlaybackFrame(currentFrame); // Force a re-render to show the change immediately
+    }
+});
 videoUploadInput.addEventListener('change', (event) => {
     const file = event.target.files[0];
     if (file) startUploadSession(file);

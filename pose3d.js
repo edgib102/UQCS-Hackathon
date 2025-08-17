@@ -43,6 +43,9 @@ class PoseScene {
         this.comPlumbLine = null;
         this.depthLaser = null;
         this.headCircle = null;
+        this.floor = null;
+        this.grid = null;
+        this.isDepthLaserEnabled = true; // Start with the laser on by default
 
         this.depthLaserMaterial = new THREE.MeshBasicMaterial({
             color: 0xff0000,
@@ -78,14 +81,16 @@ class PoseScene {
         directionalLight.shadow.mapSize.height = 1024;
         this.scene.add(directionalLight);
         
-        const floor = new THREE.Mesh(
+        this.floor = new THREE.Mesh(
             new THREE.PlaneGeometry(10, 10),
             new THREE.MeshPhongMaterial({ color: 0x333333, depthWrite: false })
         );
-        floor.rotation.x = -Math.PI / 2;
-        floor.receiveShadow = true;
-        this.scene.add(floor);
-        this.scene.add(new THREE.GridHelper(10, 20, 0x555555, 0x555555));
+        this.floor.rotation.x = -Math.PI / 2;
+        this.floor.receiveShadow = true;
+        this.scene.add(this.floor);
+        
+        this.grid = new THREE.GridHelper(10, 20, 0x555555, 0x555555);
+        this.scene.add(this.grid);
 
 
         this.skeletonGroup = new THREE.Group();
@@ -303,7 +308,7 @@ class PoseScene {
             this.comPlumbLine.visible = false;
         }
 
-        if (depth?.kneeY !== null) {
+        if (this.isDepthLaserEnabled && depth?.kneeY !== null) {
             this.depthLaser.visible = true;
             this.depthLaser.position.y = -depth.kneeY;
             this.depthLaserMaterial.color.set(depth.isParallel ? 0xff0000 : 0x00ff00);
@@ -311,6 +316,10 @@ class PoseScene {
         } else {
             this.depthLaser.visible = false;
         }
+    }
+    
+    setDepthLaserVisibility(isVisible) {
+        this.isDepthLaserEnabled = !!isVisible;
     }
 }
 
