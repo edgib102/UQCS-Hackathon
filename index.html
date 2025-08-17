@@ -228,7 +228,7 @@
         <div id="reportView" style="display: none;">
             <div class="space-y-8">
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div class="space-y-8">
+                    <div class="flex flex-col gap-8">
                         <div class="bg-gray-900 rounded-lg p-6 border border-gray-700 flex flex-col sm:flex-row items-center sm:items-start gap-6">
                             <div class="text-center flex-shrink-0">
                                 <div class="score-circle" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
@@ -246,15 +246,15 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="bg-gray-900 rounded-lg p-6 border border-gray-700">
-                            <div class="relative w-full h-96 bg-gray-950 rounded-lg overflow-hidden border border-gray-700">
+                        <div class="bg-gray-900 rounded-lg p-6 border border-gray-700 flex flex-col flex-grow">
+                            <div class="relative w-full flex-grow bg-gray-950 rounded-lg overflow-hidden border border-gray-700">
                                 <p class="absolute top-3 left-4 bg-black/50 text-white/80 text-xs font-semibold px-2 py-1 rounded-full z-10">3D PLAYBACK</p>
                                 <canvas id="playbackCanvas"></canvas>
                             </div>
                             <div class="mt-4 px-2 hidden">
                                 <input type="range" id="playbackSlider" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" min="0" max="100" value="0">
                             </div>
-                            <div class="flex items-center justify-center gap-x-6 gap-y-4 flex-wrap mt-4">
+                            <div class="flex items-baseline justify-center gap-x-6 gap-y-4 flex-wrap mt-4">
                                 <button id="playButton" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-5 rounded-md transition">Play 3D Reps</button>
                                 <div class="toggle-container flex items-center gap-3">
                                     <label for="toggleDepthLaser" class="toggle-label font-medium cursor-pointer">Depth Plane</label>
