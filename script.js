@@ -429,12 +429,13 @@ function togglePlayback() {
 function resetSession() {
     reportView.style.display = 'none';
     sessionView.style.display = 'none';
-    startView.style.display = 'block';
+    startView.style.display = 'flex'; // <<< FIX: Changed from 'block' to 'flex'
     if (playbackAnimationId) cancelAnimationFrame(playbackAnimationId);
     if (currentVideoBlobUrl) URL.revokeObjectURL(currentVideoBlobUrl);
     if (downloadBlobUrl) URL.revokeObjectURL(downloadBlobUrl);
     
     isSessionRunning = false;
+    isProcessingUpload = false; 
     frameCounter = 0;
     playbackOffset = 0;
     recordedChunks = [];
