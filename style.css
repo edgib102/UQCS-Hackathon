@@ -94,7 +94,7 @@ button:disabled {
 }
 /* Hide the live 3D pose container to close the large gap */
 #sessionView .main-content .video-container:last-child {
-    /* display: none; */
+    display: none;
 }
 
 video, .output-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 8px; }

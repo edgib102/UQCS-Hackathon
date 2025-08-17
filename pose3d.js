@@ -43,8 +43,6 @@ class PoseScene {
         this.comPlumbLine = null;
         this.depthLaser = null;
         this.headCircle = null;
-        // --- HEAD ROTATION: Add a helper object to calculate orientation ---
-        this.headOrientationHelper = new THREE.Object3D();
 
         this.depthLaserMaterial = new THREE.MeshBasicMaterial({
             color: 0xff0000,
@@ -110,7 +108,6 @@ class PoseScene {
 
         const animate = () => {
             requestAnimationFrame(animate);
-            // --- HEAD ROTATION: Removed logic that forces circle to face camera ---
             this.controls.update(); 
             this.renderer.render(this.scene, this.camera);
         };
@@ -177,7 +174,8 @@ class PoseScene {
         this.depthLaser.visible = false;
         this.skeletonGroup.add(this.depthLaser);
 
-        const headGeometry = new THREE.TorusGeometry(0.1, 0.015, 12, 24);
+        // --- FINAL FIX: Reverted size, removed incorrect initial rotation ---
+        const headGeometry = new THREE.TorusGeometry(0.1, 0.015, 12, 24); // Size reverted to 0.1
         const headMaterial = new THREE.MeshPhongMaterial({ 
             color: LANDMARK_COLORS.CENTER, 
             shininess: 30
@@ -194,7 +192,8 @@ class PoseScene {
         let lowestY = Infinity;
         const leftEar = this.jointSpheres[7];
         const rightEar = this.jointSpheres[8];
-        const nose = this.jointSpheres[0];
+        const leftShoulder = this.jointSpheres[11];
+        const rightShoulder = this.jointSpheres[12];
 
         landmarks.forEach((lm, i) => {
             const joint = this.jointSpheres[i];
@@ -215,28 +214,27 @@ class PoseScene {
             }
         });
 
-        // --- POSITIONING FIX: Adjust head ring position to be more central ---
+        // --- FINAL FIX: New logic for stable position and correct rotation ---
         const leftEarVisible = landmarks[7] && landmarks[7].visibility > 0.5;
         const rightEarVisible = landmarks[8] && landmarks[8].visibility > 0.5;
-        const noseVisible = landmarks[0] && landmarks[0].visibility > 0.5;
+        const shouldersVisible = (landmarks[11] && landmarks[11].visibility > 0.5) && (landmarks[12] && landmarks[12].visibility > 0.5);
 
-        if (this.headCircle && leftEarVisible && rightEarVisible && noseVisible) {
+        if (this.headCircle && leftEarVisible && rightEarVisible && shouldersVisible) {
             this.headCircle.visible = true;
             
-            // Calculate a more central point for the head
-            const earMidpoint = new THREE.Vector3().addVectors(leftEar.position, rightEar.position).multiplyScalar(0.5);
-            // Interpolate 40% of the way from the ears to the nose to find a better center
-            const headCenter = new THREE.Vector3().lerpVectors(earMidpoint, nose.position, 0.4);
+            const shoulderMidpoint = new THREE.Vector3().addVectors(leftShoulder.position, rightShoulder.position).multiplyScalar(0.5);
+            const shoulderWidth = leftShoulder.position.distanceTo(rightShoulder.position);
             
-            // Set the ring's position to this new center
+            // 1. POSITION: Place the head a fixed 15% gap above the shoulders
+            const gap = shoulderWidth * 0.40;
+            const headCenter = new THREE.Vector3(shoulderMidpoint.x, shoulderMidpoint.y + gap, shoulderMidpoint.z);
             this.headCircle.position.copy(headCenter);
-            
-            // Use the helper to compute the rotation based on the new center and nose
-            this.headOrientationHelper.position.copy(headCenter);
-            this.headOrientationHelper.lookAt(nose.position);
-            
-            // Apply the computed rotation to the head ring
-            this.headCircle.quaternion.copy(this.headOrientationHelper.quaternion);
+
+            // 2. ROTATION: Align the ring with the vector between the ears
+            const earVector = new THREE.Vector3().subVectors(rightEar.position, leftEar.position).normalize();
+            const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), earVector);
+            this.headCircle.quaternion.copy(quaternion);
+
         } else if (this.headCircle) {
             this.headCircle.visible = false;
         }
@@ -254,7 +252,9 @@ class PoseScene {
         });
 
         if (isFinite(lowestY)) {
-            this.skeletonGroup.position.y = -lowestY;
+            const sphereRadius = 0.025; // Radius of the joint spheres
+            // Adjust the skeleton's position to place the bottom of the lowest sphere on the grid (y=0)
+            this.skeletonGroup.position.y = -(lowestY - sphereRadius);
         }
         
         const leftHip = this.jointSpheres[23];
