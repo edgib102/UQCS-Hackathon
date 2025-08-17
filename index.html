@@ -5,15 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Squat Fix - Rep Master</title>
     
-    <!-- Tailwind CSS for modern styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Google Fonts: Poppins for UI, Space Mono for data -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     
-    <!-- Import map for Three.js -->
     <script type="importmap">
     {
         "imports": {
@@ -140,9 +137,7 @@
 
     <div class="container mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
         
-        <!-- Start View -->
         <div id="startView">
-            <!-- You can replace this video with a screen recording of your app in action! -->
             <video autoplay muted loop id="video-background" src="https://assets.mixkit.co/videos/preview/mixkit-man-in-a-bunker-doing-squats-42534-large.mp4"></video>
             
             <div class="hero-content fade-in">
@@ -159,7 +154,6 @@
                 </div>
             </div>
 
-            <!-- Instructions Section -->
             <div class="w-full max-w-4xl mx-auto mt-16 p-6 bg-gray-900/80 rounded-lg border border-gray-700 backdrop-blur-sm">
                 <h3 class="text-xl font-semibold text-white mb-4 text-center">Getting Started</h3>
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-6 text-center">
@@ -187,52 +181,53 @@
             </div>
         </div>
 
-        <!-- Session View -->
-        <div id="sessionView" style="display: none;">
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <!-- Main Content Column -->
-                <div class="lg:col-span-2 space-y-4">
-                    <div class="relative w-full aspect-video bg-black rounded-lg overflow-hidden border border-gray-700" id="video-container">
-                        <video id="video" class="w-full h-full" autoplay playsinline muted style="display: none;"></video>
-                        <canvas id="outputCanvas" class="absolute inset-0 w-full h-full"></canvas>
-                        <div id="loading" class="absolute inset-0 bg-gray-900/80 flex flex-col items-center justify-center space-y-4 backdrop-blur-sm">
-                            <div class="w-12 h-12 border-4 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
-                            <p class="text-lg font-medium">Processing video...</p>
-                        </div>
+        <div id="sessionView" style="display: none;" class="flex flex-col items-center justify-center w-full">
+
+            <div class="text-center mb-6">
+                <h2 class="text-3xl font-bold text-white tracking-tight flex items-center justify-center gap-3">
+                    <span class="relative flex h-3 w-3">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                    </span>
+                    Live Session
+                </h2>
+                <p class="text-gray-400">Your form is being analyzed in real-time. Stay focused!</p>
+            </div>
+        
+            <div class="relative w-full max-w-4xl aspect-video bg-black rounded-lg overflow-hidden border-2 border-gray-700 shadow-2xl shadow-indigo-500/10" id="video-container">
+                <video id="video" class="w-full h-full" autoplay playsinline muted style="display: none;"></video>
+                <canvas id="outputCanvas" class="absolute inset-0 w-full h-full"></canvas>
+                <div id="loading" class="absolute inset-0 bg-gray-900/80 flex flex-col items-center justify-center space-y-4 backdrop-blur-sm z-30">
+                    <div class="w-12 h-12 border-4 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+                    <p class="text-lg font-medium">Preparing session...</p>
+                </div>
+        
+                <div class="absolute top-4 right-4 z-20 grid grid-cols-2 gap-3 text-center">
+                    <div class="bg-black/50 p-3 rounded-lg backdrop-blur-sm border border-white/10">
+                        <span class="font-semibold text-xs text-gray-400 block">DEPTH</span>
+                        <p id="depth" class="font-data text-xl font-bold text-white">N/A</p>
                     </div>
-                    <!-- Status indicator moved below the video -->
-                    <div class="text-center h-8">
-                        <p id="rep-quality" class="font-data text-indigo-400 text-2xl lg:text-3xl font-bold transition-all duration-300">POSITIONING...</p>
+                    <div class="bg-black/50 p-3 rounded-lg backdrop-blur-sm border border-white/10">
+                        <span class="font-semibold text-xs text-gray-400 block">SYMMETRY</span>
+                        <p id="symmetry" class="font-data text-xl font-bold text-white">N/A</p>
                     </div>
                 </div>
-                <!-- Sidebar Column -->
-                <div class="space-y-6">
-                    <div class="bg-gray-900 rounded-lg p-6 border border-gray-700">
-                        <h3 class="text-lg font-bold text-white mb-4">Live Metrics</h3>
-                        <div class="space-y-4">
-                             <!-- Status removed from here -->
-                            <div class="flex justify-between items-center bg-gray-800/50 p-3 rounded-md">
-                                <span class="font-semibold text-sm text-gray-400">DEPTH</span>
-                                <p id="depth" class="font-data text-lg">N/A</p>
-                            </div>
-                            <div class="flex justify-between items-center bg-gray-800/50 p-3 rounded-md">
-                                <span class="font-semibold text-sm text-gray-400">SYMMETRY</span>
-                                <p id="symmetry" class="font-data text-lg">N/A</p>
-                            </div>
-                        </div>
-                    </div>
-                    <button id="finishButton" class="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white font-bold py-3 px-4 rounded-md transition-transform transform hover:scale-105">
-                        Finish Session
-                    </button>
+        
+                <div class="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 w-auto">
+                     <p id="rep-quality" class="font-data text-white text-xl font-bold transition-all duration-300 bg-black/60 backdrop-blur-sm py-2 px-6 rounded-full border border-white/10 shadow-lg">POSITIONING...</p>
                 </div>
+            </div>
+        
+            <div class="mt-8">
+                <button id="finishButton" class="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white font-bold py-3 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100">
+                    Finish & View Report
+                </button>
             </div>
         </div>
 
-        <!-- Report View -->
         <div id="reportView" style="display: none;">
             <div class="space-y-8">
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <!-- Left Column: Visuals -->
                     <div class="space-y-8">
                         <div class="bg-gray-900 rounded-lg p-6 border border-gray-700 flex flex-col sm:flex-row items-center sm:items-start gap-6">
                             <div class="text-center flex-shrink-0">
@@ -256,6 +251,9 @@
                                 <p class="absolute top-3 left-4 bg-black/50 text-white/80 text-xs font-semibold px-2 py-1 rounded-full z-10">3D PLAYBACK</p>
                                 <canvas id="playbackCanvas"></canvas>
                             </div>
+                            <div class="mt-4 px-2">
+                                <input type="range" id="playbackSlider" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer hidden" min="0" max="100" value="0">
+                            </div>
                             <div class="flex items-center justify-center gap-x-6 gap-y-4 flex-wrap mt-4">
                                 <button id="playButton" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-5 rounded-md transition">Play 3D Reps</button>
                                 <div class="toggle-container flex items-center gap-3">
@@ -268,11 +266,9 @@
                             </div>
                         </div>
                     </div>
-                    <!-- Right Column: Analysis -->
                     <div class="bg-gray-900 rounded-lg p-6 border border-gray-700">
                         <h3 class="text-xl font-bold text-white mb-4">Score Breakdown & How to Improve</h3>
                         <div class="space-y-6">
-                            <!-- Depth Breakdown -->
                             <div class="breakdown-item" id="breakdown-item-depth">
                                 <div class="flex justify-between items-center mb-2">
                                     <h4 class="font-bold text-white">Depth</h4>
@@ -283,7 +279,6 @@
                                 </div>
                                 <p id="breakdown-desc-depth" class="text-sm text-gray-400 mt-2"></p>
                             </div>
-                            <!-- Symmetry Breakdown -->
                             <div class="breakdown-item" id="breakdown-item-symmetry">
                                 <div class="flex justify-between items-center mb-2">
                                     <h4 class="font-bold text-white">Symmetry</h4>
@@ -294,7 +289,6 @@
                                 </div>
                                 <p id="breakdown-desc-symmetry" class="text-sm text-gray-400 mt-2"></p>
                             </div>
-                            <!-- Knee Stability Breakdown -->
                             <div class="breakdown-item" id="breakdown-item-valgus">
                                 <div class="flex justify-between items-center mb-2">
                                     <h4 class="font-bold text-white">Knee Stability</h4>
@@ -305,7 +299,6 @@
                                 </div>
                                 <p id="breakdown-desc-valgus" class="text-sm text-gray-400 mt-2"></p>
                             </div>
-                            <!-- Consistency Breakdown -->
                             <div class="breakdown-item" id="breakdown-item-consistency">
                                 <div class="flex justify-between items-center mb-2">
                                     <h4 class="font-bold text-white">Consistency</h4>
@@ -317,7 +310,6 @@
                                 <p id="breakdown-desc-consistency" class="text-sm text-gray-400 mt-2"></p>
                             </div>
                         </div>
-                        <!-- Overall Summary Section -->
                         <div class="mt-6 pt-6 border-t border-gray-700">
                             <h4 class="text-lg font-bold text-white mb-2">Overall Summary</h4>
                             <p id="summary-text" class="text-sm text-gray-300"></p>
@@ -327,7 +319,6 @@
                     </div>
                 </div>
                 
-                <!-- Full-width Graph Section -->
                 <div class="bg-gray-900 rounded-lg p-6 border border-gray-700">
                     <div class="h-96 w-full">
                         <canvas id="hipHeightChart"></canvas>
@@ -349,10 +340,8 @@
         </div>
     </div>
 
-    <!-- ADDED: Toast Notification Element -->
     <div id="toast-notification"></div>
 
-    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>

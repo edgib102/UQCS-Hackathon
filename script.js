@@ -156,7 +156,7 @@ function onResults(results) {
             if (stats.liveDepth < 95) quality = ' (Excellent)';
             else if (stats.liveDepth < 110) quality = ' (Good)';
             else if (stats.liveDepth < 150) quality = ' (Shallow)';
-            depthText = `${stats.liveDepth.toFixed(0)}°${quality}`;
+            depthText = `${stats.liveDepth.toFixed(0)}°`;
 
             if (squatState === 'up' && stats.liveDepth < 110) { 
                 squatState = 'down';
@@ -234,7 +234,7 @@ async function startSession() {
 
     startView.style.display = 'none';
     reportView.style.display = 'none';
-    sessionView.style.display = 'block';
+    sessionView.style.display = 'flex';
     loadingElement.style.display = 'flex';
     downloadButton.style.display = 'inline-block';
     
@@ -269,7 +269,7 @@ function startUploadSession(file) {
     isCalibrating = false;
     startView.style.display = 'none';
     reportView.style.display = 'none';
-    sessionView.style.display = 'block';
+    sessionView.style.display = 'flex';
     loadingElement.style.display = 'flex';
     downloadButton.style.display = 'none';
 
