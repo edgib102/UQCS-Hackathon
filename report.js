@@ -188,6 +188,47 @@ export function processAndRenderReport(sessionData) {
     updateBreakdown('valgus', valgusScore, SCORE_WEIGHTS.valgus, { count: valgusCount, totalReps: finalRepHistory.length });
     updateBreakdown('consistency', consistencyScore, SCORE_WEIGHTS.consistency, { stdDev });
 
+    // --- Generate and Display Summary and Improvement Text ---
+    const summaryEl = document.getElementById('summary-text');
+    const improvementEl = document.getElementById('improvement-text');
+
+    let summary = '';
+    if (totalScore > 85) {
+        summary = `This was an excellent set of ${finalRepHistory.length} reps. Your form is solid across the board, showing great control and technique. Keep up the fantastic work!`;
+    } else if (totalScore > 60) {
+        summary = `A solid performance over ${finalRepHistory.length} reps. Your overall form is good, but there are a few key areas where you can make improvements to increase your score and reduce injury risk.`;
+    } else {
+        summary = `This set of ${finalRepHistory.length} reps is a good starting point. We've identified some significant areas for improvement that will help you build a stronger, safer squat.`;
+    }
+    summaryEl.innerText = summary;
+
+    const scores = {
+        depth: depthScore / SCORE_WEIGHTS.depth,
+        symmetry: symmetryScore / SCORE_WEIGHTS.symmetry,
+        valgus: valgusScore / SCORE_WEIGHTS.valgus,
+        consistency: consistencyScore / SCORE_WEIGHTS.consistency
+    };
+
+    const lowestMetric = Object.keys(scores).reduce((a, b) => scores[a] < scores[b] ? a : b);
+
+    let improvement = '';
+    switch (lowestMetric) {
+        case 'depth':
+            improvement = 'Your biggest opportunity is in achieving greater depth. Focus on ankle and hip mobility exercises. Try to lower your hips until they are at least parallel with your knees.';
+            break;
+        case 'symmetry':
+            improvement = 'Improving your symmetry is the top priority. You may be shifting your weight to one side. Try focusing on a "tripod foot" cue (big toe, little toe, and heel) to distribute pressure evenly.';
+            break;
+        case 'valgus':
+            improvement = 'Focus on knee stability. The tendency for your knees to cave inward (valgus) is the most critical area to address. Strengthen your glutes with exercises like banded side walks and consciously push your knees out during the entire squat.';
+            break;
+        case 'consistency':
+            improvement = 'Work on making every rep look the same. Your form varies between reps, which can lead to instability. Try using a consistent tempo (e.g., counting "3-2-1" down and "1" up) to standardize your movement.';
+            break;
+    }
+    improvementEl.innerText = improvement;
+
+
     // --- Chart Rendering ---
     const hipHeightChartCanvas = document.getElementById('hipHeightChart');
     const chartInstance = renderHipHeightChart(hipHeightChartCanvas, hipHeightData, symmetryData, valgusData);
