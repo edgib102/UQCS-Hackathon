@@ -24,6 +24,9 @@ const playButton = document.getElementById('playButton');
 const toggleDepthLaser = document.getElementById('toggleDepthLaser');
 const videoUploadInput = document.getElementById('videoUpload');
 const playbackSlider = document.getElementById('playbackSlider');
+const showWorstRepButton = document.getElementById('showWorstRepButton');
+const showBestRepButton = document.getElementById('showBestRepButton');
+
 
 // --- State Management ---
 let mediaRecorder;

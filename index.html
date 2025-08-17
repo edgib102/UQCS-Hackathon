@@ -181,6 +181,16 @@
             </div>
         </div>
 
+        <div id="sessionView" style="display: none;">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 space-y-4">
+                    <div class="relative w-full aspect-video bg-black rounded-lg overflow-hidden border border-gray-700" id="video-container">
+                        <video id="video" class="w-full h-full" autoplay playsinline muted style="display: none;"></video>
+                        <canvas id="outputCanvas" class="absolute inset-0 w-full h-full"></canvas>
+                        <div id="loading" class="absolute inset-0 bg-gray-900/80 flex flex-col items-center justify-center space-y-4 backdrop-blur-sm">
+                            <div class="w-12 h-12 border-4 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+                            <p class="text-lg font-medium">Processing video...</p>
+                        </div>
         <div id="sessionView" style="display: none;" class="flex flex-col items-center justify-center w-full">
 
             <div class="text-center mb-6">
@@ -207,11 +217,30 @@
                         <span class="font-semibold text-xs text-gray-400 block">DEPTH</span>
                         <p id="depth" class="font-data text-xl font-bold text-white">N/A</p>
                     </div>
+                    <div class="text-center h-8">
+                        <p id="rep-quality" class="font-data text-indigo-400 text-2xl lg:text-3xl font-bold transition-all duration-300">POSITIONING...</p>
                     <div class="bg-black/50 p-3 rounded-lg backdrop-blur-sm border border-white/10">
                         <span class="font-semibold text-xs text-gray-400 block">SYMMETRY</span>
                         <p id="symmetry" class="font-data text-xl font-bold text-white">N/A</p>
                     </div>
                 </div>
+                <div class="space-y-6">
+                    <div class="bg-gray-900 rounded-lg p-6 border border-gray-700">
+                        <h3 class="text-lg font-bold text-white mb-4">Live Metrics</h3>
+                        <div class="space-y-4">
+                             <div class="flex justify-between items-center bg-gray-800/50 p-3 rounded-md">
+                                <span class="font-semibold text-sm text-gray-400">DEPTH</span>
+                                <p id="depth" class="font-data text-lg">N/A</p>
+                            </div>
+                            <div class="flex justify-between items-center bg-gray-800/50 p-3 rounded-md">
+                                <span class="font-semibold text-sm text-gray-400">SYMMETRY</span>
+                                <p id="symmetry" class="font-data text-lg">N/A</p>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="finishButton" class="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white font-bold py-3 px-4 rounded-md transition-transform transform hover:scale-105">
+                        Finish Session
+                    </button>
         
                 <div class="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 w-auto">
                      <p id="rep-quality" class="font-data text-white text-xl font-bold transition-all duration-300 bg-black/60 backdrop-blur-sm py-2 px-6 rounded-full border border-white/10 shadow-lg">POSITIONING...</p>
@@ -250,6 +279,9 @@
                             <div class="relative w-full h-96 bg-gray-950 rounded-lg overflow-hidden border border-gray-700">
                                 <p class="absolute top-3 left-4 bg-black/50 text-white/80 text-xs font-semibold px-2 py-1 rounded-full z-10">3D PLAYBACK</p>
                                 <canvas id="playbackCanvas"></canvas>
+                            </div>
+                            <div class="mt-4 px-2">
+                                <input type="range" id="playbackSlider" min="0" max="100" value="0" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
                             </div>
                             <div class="mt-4 px-2">
                                 <input type="range" id="playbackSlider" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer hidden" min="0" max="100" value="0">
