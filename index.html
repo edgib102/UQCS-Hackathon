@@ -167,92 +167,97 @@
         <!-- Report View -->
         <div id="reportView" style="display: none;">
             <div class="space-y-8">
-                <!-- Top Section: Score, Breakdown, and 3D Playback -->
-                <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
-                    <div class="lg:col-span-3 bg-gray-900 rounded-lg p-6 border border-gray-700 flex flex-col sm:flex-row items-center sm:items-start gap-6">
-                        <div class="text-center flex-shrink-0">
-                            <div class="score-circle" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-                                <span id="report-score-value" class="font-data">0</span>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Left Column: Visuals -->
+                    <div class="space-y-8">
+                        <div class="bg-gray-900 rounded-lg p-6 border border-gray-700 flex flex-col sm:flex-row items-center sm:items-start gap-6">
+                            <div class="text-center flex-shrink-0">
+                                <div class="score-circle" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                                    <span id="report-score-value" class="font-data">0</span>
+                                </div>
+                                <div class="mt-2 text-lg font-semibold text-gray-200">Overall Score</div>
                             </div>
-                            <div class="mt-2 text-lg font-semibold text-gray-200">Overall Score</div>
+                            <div class="flex-1 w-full">
+                                <h3 class="text-xl font-bold text-white mb-4">Performance Summary</h3>
+                                <div class="space-y-3 text-sm">
+                                    <div class="flex justify-between"><strong>Overall Quality:</strong> <span id="report-quality-overall" class="font-data text-gray-300"></span></div>
+                                    <div class="flex justify-between"><strong>Average Depth:</strong> <span id="report-depth-avg" class="font-data text-gray-300"></span></div>
+                                    <div class="flex justify-between"><strong>Average Symmetry:</strong> <span id="report-symmetry-avg" class="font-data text-gray-300"></span></div>
+                                    <div class="flex justify-between"><strong>Knee Valgus:</strong> <span id="report-valgus-count" class="font-data text-gray-300"></span></div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="flex-1 w-full">
-                            <h3 class="text-xl font-bold text-white mb-4">Performance Summary</h3>
-                            <div class="space-y-3 text-sm">
-                                <div class="flex justify-between"><strong>Overall Quality:</strong> <span id="report-quality-overall" class="font-data text-gray-300"></span></div>
-                                <div class="flex justify-between"><strong>Average Depth:</strong> <span id="report-depth-avg" class="font-data text-gray-300"></span></div>
-                                <div class="flex justify-between"><strong>Average Symmetry:</strong> <span id="report-symmetry-avg" class="font-data text-gray-300"></span></div>
-                                <div class="flex justify-between"><strong>Knee Valgus:</strong> <span id="report-valgus-count" class="font-data text-gray-300"></span></div>
+                        <div class="bg-gray-900 rounded-lg p-6 border border-gray-700">
+                            <div class="relative w-full h-96 bg-gray-950 rounded-lg overflow-hidden border border-gray-700">
+                                <p class="absolute top-3 left-4 bg-black/50 text-white/80 text-xs font-semibold px-2 py-1 rounded-full z-10">3D PLAYBACK</p>
+                                <canvas id="playbackCanvas"></canvas>
+                            </div>
+                            <div class="flex items-center justify-center gap-x-6 gap-y-4 flex-wrap mt-4">
+                                <button id="playButton" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-5 rounded-md transition">Play 3D Reps</button>
+                                <div class="toggle-container flex items-center gap-3">
+                                    <label for="toggleDepthLaser" class="toggle-label font-medium cursor-pointer">Depth Plane</label>
+                                    <label class="toggle-switch relative inline-block w-[50px] h-[26px]">
+                                        <input type="checkbox" id="toggleDepthLaser" class="opacity-0 w-0 h-0" checked>
+                                        <span class="slider absolute cursor-pointer inset-0 bg-gray-600 rounded-full transition-all duration-300 before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-[3px] before:bg-white before:rounded-full before:transition-all before:duration-300"></span>
+                                    </label>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    <div class="lg:col-span-2 relative w-full h-64 md:h-80 lg:h-full bg-gray-950 rounded-lg overflow-hidden border border-gray-700">
-                        <p class="absolute top-3 left-4 bg-black/50 text-white/80 text-xs font-semibold px-2 py-1 rounded-full z-10">3D PLAYBACK</p>
-                        <canvas id="playbackCanvas"></canvas>
-                    </div>
-                </div>
-
-                <!-- Breakdown Section -->
-                <div class="bg-gray-900 rounded-lg p-6 border border-gray-700">
-                    <h3 class="text-xl font-bold text-white mb-4">Score Breakdown & How to Improve</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="breakdown-item bg-gray-800/50 p-4 rounded-md" id="breakdown-item-depth">
-                            <div class="flex justify-between items-center mb-2">
-                                <h4 class="flex items-center gap-3 font-bold"><span class="breakdown-dot h-3 w-3 rounded-full" style="background-color: #60a5fa;"></span>Depth</h4>
-                                <span id="breakdown-score-depth" class="font-data font-semibold">0/30</span>
+                    <!-- Right Column: Analysis -->
+                    <div class="space-y-8">
+                        <div class="bg-gray-900 rounded-lg p-6 border border-gray-700">
+                            <h3 class="text-xl font-bold text-white mb-4">Score Breakdown & How to Improve</h3>
+                            <div class="space-y-4">
+                                <div class="breakdown-item bg-gray-800/50 p-4 rounded-md" id="breakdown-item-depth">
+                                    <div class="flex justify-between items-center mb-2">
+                                        <h4 class="flex items-center gap-3 font-bold"><span class="breakdown-dot h-3 w-3 rounded-full" style="background-color: #60a5fa;"></span>Depth</h4>
+                                        <span id="breakdown-score-depth" class="font-data font-semibold">0/30</span>
+                                    </div>
+                                    <p id="breakdown-desc-depth" class="text-sm text-gray-400"></p>
+                                </div>
+                                <div class="breakdown-item bg-gray-800/50 p-4 rounded-md" id="breakdown-item-symmetry">
+                                    <div class="flex justify-between items-center mb-2">
+                                        <h4 class="flex items-center gap-3 font-bold"><span class="breakdown-dot h-3 w-3 rounded-full" style="background-color: #fb923c;"></span>Symmetry</h4>
+                                        <span id="breakdown-score-symmetry" class="font-data font-semibold">0/30</span>
+                                    </div>
+                                    <p id="breakdown-desc-symmetry" class="text-sm text-gray-400"></p>
+                                </div>
+                                <div class="breakdown-item bg-gray-800/50 p-4 rounded-md" id="breakdown-item-valgus">
+                                    <div class="flex justify-between items-center mb-2">
+                                        <h4 class="flex items-center gap-3 font-bold"><span class="breakdown-dot h-3 w-3 rounded-full" style="background-color: #f87171;"></span>Knee Stability</h4>
+                                        <span id="breakdown-score-valgus" class="font-data font-semibold">0/20</span>
+                                    </div>
+                                    <p id="breakdown-desc-valgus" class="text-sm text-gray-400"></p>
+                                </div>
+                                <div class="breakdown-item bg-gray-800/50 p-4 rounded-md" id="breakdown-item-consistency">
+                                    <div class="flex justify-between items-center mb-2">
+                                        <h4 class="flex items-center gap-3 font-bold"><span class="breakdown-dot h-3 w-3 rounded-full" style="background-color: #5eead4;"></span>Consistency</h4>
+                                        <span id="breakdown-score-consistency" class="font-data font-semibold">0/20</span>
+                                    </div>
+                                    <p id="breakdown-desc-consistency" class="text-sm text-gray-400"></p>
+                                </div>
                             </div>
-                            <p id="breakdown-desc-depth" class="text-sm text-gray-400"></p>
-                        </div>
-                        <div class="breakdown-item bg-gray-800/50 p-4 rounded-md" id="breakdown-item-symmetry">
-                            <div class="flex justify-between items-center mb-2">
-                                <h4 class="flex items-center gap-3 font-bold"><span class="breakdown-dot h-3 w-3 rounded-full" style="background-color: #fb923c;"></span>Symmetry</h4>
-                                <span id="breakdown-score-symmetry" class="font-data font-semibold">0/30</span>
-                            </div>
-                            <p id="breakdown-desc-symmetry" class="text-sm text-gray-400"></p>
-                        </div>
-                        <div class="breakdown-item bg-gray-800/50 p-4 rounded-md" id="breakdown-item-valgus">
-                            <div class="flex justify-between items-center mb-2">
-                                <h4 class="flex items-center gap-3 font-bold"><span class="breakdown-dot h-3 w-3 rounded-full" style="background-color: #f87171;"></span>Knee Stability</h4>
-                                <span id="breakdown-score-valgus" class="font-data font-semibold">0/20</span>
-                            </div>
-                            <p id="breakdown-desc-valgus" class="text-sm text-gray-400"></p>
-                        </div>
-                        <div class="breakdown-item bg-gray-800/50 p-4 rounded-md" id="breakdown-item-consistency">
-                            <div class="flex justify-between items-center mb-2">
-                                <h4 class="flex items-center gap-3 font-bold"><span class="breakdown-dot h-3 w-3 rounded-full" style="background-color: #5eead4;"></span>Consistency</h4>
-                                <span id="breakdown-score-consistency" class="font-data font-semibold">0/20</span>
-                            </div>
-                            <p id="breakdown-desc-consistency" class="text-sm text-gray-400"></p>
                         </div>
                     </div>
                 </div>
                 
-                <!-- Chart and Controls Section -->
+                <!-- Full-width Graph Section -->
                 <div class="bg-gray-900 rounded-lg p-6 border border-gray-700">
-                    <div class="h-80 w-full">
+                    <div class="h-96 w-full">
                         <canvas id="hipHeightChart"></canvas>
                     </div>
-                    <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mt-6">
-                        <button id="playButton" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-5 rounded-md transition">Play 3D Reps</button>
-                        <input type="range" id="playbackSlider" value="0" class="w-full max-w-xs" style="display: none;">
+                     <div class="flex items-center justify-center gap-4 mt-4">
                         <button id="showWorstRepButton" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-5 rounded-md transition">Worst Stability</button>
                         <button id="showBestRepButton" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-5 rounded-md transition">Deepest Squat</button>
                     </div>
                 </div>
 
-                <!-- Footer Actions -->
                 <div class="text-center border-t border-gray-700 pt-6 mt-4">
                     <p class="mb-6 text-gray-400">Analyze your form, download the recording, or go for another set.</p>
                     <div class="flex items-center justify-center gap-x-6 gap-y-4 flex-wrap">
-                        <div class="toggle-container flex items-center gap-3">
-                            <label for="toggleDepthLaser" class="toggle-label font-medium cursor-pointer">Depth Plane</label>
-                            <label class="toggle-switch relative inline-block w-[50px] h-[26px]">
-                                <input type="checkbox" id="toggleDepthLaser" class="opacity-0 w-0 h-0" checked>
-                                <span class="slider absolute cursor-pointer inset-0 bg-gray-600 rounded-full transition-all duration-300 before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-[3px] before:bg-white before:rounded-full before:transition-all before:duration-300"></span>
-                            </label>
-                        </div>
                         <a id="downloadButton" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-5 rounded-md transition" download="squat_session.webm">Download Video</a>
-                        <button id="resetButton" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-5 rounded-md transition">Go Again</button>
+                        <button id="resetButton" class="bg-gradient-to-r from-green-400 to-blue-500 hover:from-green-500 hover:to-blue-600 text-white font-bold py-3 px-8 rounded-lg transition transform hover:scale-105 shadow-lg">Go Again</button>
                     </div>
                 </div>
             </div>
@@ -261,6 +266,10 @@
 
     <!-- ADDED: Toast Notification Element -->
     <div id="toast-notification"></div>
+    
+    <!-- This input is no longer visible but is required by script.js -->
+    <input type="range" id="playbackSlider" value="0" class="w-full max-w-xs" style="display: none;">
+
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
