@@ -383,11 +383,34 @@ export function analyzeSession(allLandmarks, allWorldLandmarks) {
             continue;
         }
 
-        // Simplified rep boundary detection
-        const startFrame = Math.max(0, troughIndex - 20);
-        const endFrame = Math.min(allLandmarks.length - 1, troughIndex + 20);
-        
-        // Skip prominence check - we already found the movement
+        // MODIFIED: Replaced fixed-window boundary detection with dynamic search.
+        // The goal is to find the actual start and end of the squat movement.
+        let startFrame = troughIndex;
+        // Search backwards from the bottom (trough) to find the start of the descent (peak).
+        // A "peak" in this data is a local minimum, as lower Y-values mean standing higher.
+        for (let i = troughIndex - 1; i >= 0; i--) {
+            startFrame = i;
+            if (i > 0 && smoothedHipY[i] !== null && smoothedHipY[i-1] !== null && smoothedHipY[i] < smoothedHipY[i-1]) {
+                // The value starts decreasing, meaning we've found the peak before the descent.
+                break;
+            }
+        }
+
+        let endFrame = troughIndex;
+        // Search forwards from the bottom (trough) to find the end of the ascent (peak).
+        for (let i = troughIndex + 1; i < smoothedHipY.length; i++) {
+            endFrame = i;
+            if (i < smoothedHipY.length - 1 && smoothedHipY[i] !== null && smoothedHipY[i+1] !== null && smoothedHipY[i] < smoothedHipY[i+1]) {
+                // The value starts decreasing again, meaning we've found the peak after the ascent.
+                break;
+            }
+        }
+
+        // If the dynamic search fails and produces a huge or tiny window, fall back to a reasonable fixed size.
+        if (endFrame - startFrame > 60 || endFrame - startFrame < 8) {
+             startFrame = Math.max(0, troughIndex - 15);
+             endFrame = Math.min(allLandmarks.length - 1, troughIndex + 15);
+        }
         
         // Simplified analysis - don't require perfect data
         let maxLeftValgus = 0, maxRightValgus = 0, totalSymmetryDiff = 0, symmetrySamples = 0;
