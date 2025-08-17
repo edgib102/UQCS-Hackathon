@@ -94,40 +94,91 @@
             border-radius: 9999px;
             transition: width 1.5s ease-in-out;
         }
+        /* Hero Section Styling */
+        #startView {
+            min-height: calc(100vh - 200px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        #video-background {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: translate(-50%, -50%);
+            z-index: -2;
+            filter: blur(4px) brightness(0.4);
+        }
+        .hero-content {
+            z-index: 1;
+            background: rgba(3, 7, 18, 0.6);
+            padding: 2rem;
+            border-radius: 1rem;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in {
+            animation: fadeIn 1s ease-out forwards;
+        }
     </style>
 </head>
 <body class="text-gray-300">
 
     <div class="container mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
-        <header class="text-center mb-10">
-            <h1 class="text-4xl sm:text-5xl font-bold text-gray-100 tracking-tight">Rep Master</h1>
-            <p class="text-lg text-gray-400 mt-2">AI-Powered Squat Analysis</p>
-        </header>
-
+        
+        <!-- Start View -->
         <div id="startView">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-                <div class="bg-gray-900 rounded-lg p-6 border border-gray-700">
-                    <h3 class="text-xl font-semibold text-white mb-4">Instructions</h3>
-                    <ul class="space-y-3 text-gray-400 list-disc list-inside">
-                        <li><strong>Positioning:</strong> Stand 2-3 meters from your camera.</li>
-                        <li><strong>Visibility:</strong> Ensure your entire body, head to feet, is visible.</li>
-                        <li><strong>Clothing:</strong> Wear clothes that contrast with your background.</li>
-                        <li><strong>Lighting:</strong> Ensure the room is well-lit from the front.</li>
-                    </ul>
+            <!-- You can replace this video with a screen recording of your app in action! -->
+            <video autoplay muted loop id="video-background" src="https://assets.mixkit.co/videos/preview/mixkit-man-in-a-bunker-doing-squats-42534-large.mp4"></video>
+            
+            <div class="hero-content fade-in">
+                <h1 class="text-5xl md:text-6xl font-bold text-white tracking-tight">Rep Master</h1>
+                <p class="text-lg text-gray-300 mt-4 max-w-2xl mx-auto">Perfect your form, prevent injury, and unlock your true strength with real-time AI feedback on every squat.</p>
+                <div class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
+                    <button id="startButton" class="w-full sm:w-auto bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg transition-all transform hover:scale-105">
+                        Start Live Camera Session
+                    </button>
+                    <label for="videoUpload" class="w-full sm:w-auto block text-center bg-transparent hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-all transform hover:scale-105 cursor-pointer border-2 border-gray-600">
+                        Analyze Video File
+                    </label>
+                    <input type="file" id="videoUpload" accept="video/mp4,video/webm" class="hidden">
                 </div>
-                <div class="bg-gray-900 rounded-lg p-6 border border-gray-700 flex flex-col justify-between">
-                    <div>
-                        <h2 class="text-2xl font-bold text-white mb-3">Start Your Session</h2>
-                        <p class="text-gray-400 mb-6">Get a detailed report on your squat form. Choose your input method below.</p>
+            </div>
+
+            <!-- Instructions Section -->
+            <div class="w-full max-w-4xl mx-auto mt-16 p-6 bg-gray-900/80 rounded-lg border border-gray-700 backdrop-blur-sm">
+                <h3 class="text-xl font-semibold text-white mb-4 text-center">Getting Started</h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 text-center">
+                    <div class="flex flex-col items-center">
+                        <svg class="w-10 h-10 mb-2 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        <h4 class="font-semibold text-white">Positioning</h4>
+                        <p class="text-sm text-gray-400">Stand 2-3 meters from your camera.</p>
                     </div>
-                    <div class="space-y-4">
-                        <button id="startButton" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-4 rounded-md transition-all transform hover:scale-[1.02]">
-                            Start Live Camera Session
-                        </button>
-                        <label for="videoUpload" class="w-full block text-center bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-md transition-all transform hover:scale-[1.02] cursor-pointer">
-                            Analyze Video File
-                        </label>
-                        <input type="file" id="videoUpload" accept="video/mp4,video/webm" class="hidden">
+                    <div class="flex flex-col items-center">
+                        <svg class="w-10 h-10 mb-2 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.636 18.364a9 9 0 010-12.728m12.728 0a9 9 0 010 12.728m-9.9-2.829a5 5 0 010-7.07m7.072 0a5 5 0 010 7.07M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        <h4 class="font-semibold text-white">Visibility</h4>
+                        <p class="text-sm text-gray-400">Ensure your entire body is visible.</p>
+                    </div>
+                    <div class="flex flex-col items-center">
+                        <svg class="w-10 h-10 mb-2 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+                        <h4 class="font-semibold text-white">Clothing</h4>
+                        <p class="text-sm text-gray-400">Wear contrasting clothes.</p>
+                    </div>
+                    <div class="flex flex-col items-center">
+                         <svg class="w-10 h-10 mb-2 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v1.5M12 16.253v1.5M16.253 12h-1.5M7.747 12h-1.5M18.364 5.636l-1.06-1.06M6.697 17.303l-1.06-1.06M18.364 18.364l-1.06-1.06M6.697 6.697l-1.06-1.06" opacity=".3"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3.253v1.5M12 19.253v1.5M19.253 12h-1.5M4.747 12h-1.5M19.424 4.576l-1.06-1.06M5.636 18.364l-1.06-1.06M19.424 19.424l-1.06-1.06M5.636 5.636l-1.06-1.06"></path></svg>
+                        <h4 class="font-semibold text-white">Lighting</h4>
+                        <p class="text-sm text-gray-400">Use a well-lit room.</p>
                     </div>
                 </div>
             </div>
