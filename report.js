@@ -68,15 +68,15 @@ function updateBreakdown(metric, score, weight, values) {
 /**
  * Analyzes session data, calculates scores, and updates the report UI.
  * @param {object} sessionData - An object containing all the recorded data from the session.
- * @returns {object} An object containing the processed data and the new chart instance.
+ * @returns {object|null} An object with processed data and chart instance, or null if analysis fails.
  */
 export function processAndRenderReport(sessionData) {
     let { recordedPoseLandmarks, recordedWorldLandmarks, hipHeightData, symmetryData, valgusData, frameCounter } = sessionData;
 
     const finalRepHistory = analyzeSession(recordedPoseLandmarks, recordedWorldLandmarks);
     if (finalRepHistory.length === 0) {
-        alert("No valid squats were detected in the session. Please ensure your full body is visible and try again.");
-        return null;
+        console.error("No valid squats were detected in the session.");
+        return null; // Return null instead of showing an alert
     }
 
     // --- Data Cropping ---
