@@ -446,8 +446,6 @@ function startPlayback() {
     if (playbackAnimationId) clearTimeout(playbackAnimationId);
     let frame = parseInt(playbackSlider.value, 10);
     if (frame >= recordedWorldLandmarks.length - 1) frame = 0;
-    playButton.disabled = true;
-    playButton.innerText = "Playing...";
     
     const PLAYBACK_FPS = 20; // Slower playback speed
 
@@ -467,14 +465,14 @@ function togglePlayback() {
     if (playbackAnimationId) {
         clearTimeout(playbackAnimationId);
         playbackAnimationId = null;
-        playButton.disabled = false;
         playButton.innerText = "Play 3D Reps";
         if (hipChartInstance) {
             hipChartInstance.options.plugins.playbackCursor.frame = null;
             hipChartInstance.update('none');
         }
     } else {
-        clearRepHighlight(); 
+        clearRepHighlight();
+        playButton.innerText = "Pause";
         startPlayback();
     }
 }
