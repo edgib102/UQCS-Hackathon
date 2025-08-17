@@ -133,9 +133,9 @@ export function processAndRenderReport(sessionData) {
     else if (stdDev <= MAX_ACCEPTABLE_STD_DEV) consistencyProgress = 0.3 + 0.5 * (MAX_ACCEPTABLE_STD_DEV - stdDev) / (MAX_ACCEPTABLE_STD_DEV - GOOD_STD_DEV);
     else consistencyProgress = Math.max(0, 0.3 * Math.exp(-0.1 * (stdDev - MAX_ACCEPTABLE_STD_DEV)));
     const consistencyScore = consistencyProgress * SCORE_WEIGHTS.consistency;
-    const avgConfidence = finalRepHistory.reduce((sum, rep) => sum + (rep.confidence || 1), 0) / finalRepHistory.length;
-    const confidenceMultiplier = Math.max(0.7, avgConfidence);
-    const totalScore = Math.round((depthScore + symmetryScore + valgusScore + consistencyScore) * confidenceMultiplier);
+    
+    // MODIFIED: The overall score is now a direct sum of the individual scores.
+    const totalScore = Math.round(depthScore + symmetryScore + valgusScore + consistencyScore);
 
     // --- UI Updates ---
     const scoreValueEl = document.getElementById('report-score-value');

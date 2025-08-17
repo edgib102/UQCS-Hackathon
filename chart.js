@@ -1,3 +1,5 @@
+// chart.js
+
 /**
  * Renders a line chart of hip height, symmetry, and stability over time.
  * @param {HTMLCanvasElement} canvas The canvas element to draw the chart on.
@@ -26,7 +28,7 @@ const playbackCursorPlugin = {
     ctx.moveTo(xPos, yAxis.top);
     ctx.lineTo(xPos, yAxis.bottom);
     ctx.lineWidth = 2;
-    ctx.strokeStyle = '#FF4136'; // A bright, visible color
+    ctx.strokeStyle = '#14b8a6'; // MODIFIED: Changed from red to teal-500
     ctx.stroke();
     ctx.restore();
   }
