@@ -321,6 +321,9 @@ function stopSession() {
         hipChartInstance = reportResult.chartInstance;
         ({ recordedWorldLandmarks, recordedPoseLandmarks, hipHeightData, symmetryData, valgusData } = reportResult.croppedData);
         
+        // MODIFIED: Dynamically set the slider's max value to the number of frames.
+        playbackSlider.max = recordedWorldLandmarks.length > 0 ? recordedWorldLandmarks.length - 1 : 0;
+        
         setupReportInteractivity();
         updatePlaybackFrame(0);
 
@@ -452,8 +455,6 @@ function startPlayback() {
     if (playbackAnimationId) clearTimeout(playbackAnimationId);
     let frame = parseInt(playbackSlider.value, 10);
     if (frame >= recordedWorldLandmarks.length - 1) frame = 0;
-    playButton.disabled = true;
-    playButton.innerText = "Playing...";
     
     const PLAYBACK_FPS = 20; // Slower playback speed
 
@@ -461,6 +462,10 @@ function startPlayback() {
         if (frame >= recordedWorldLandmarks.length) {
             togglePlayback(); 
             playButton.innerText = "Replay";
+            if (hipChartInstance) {
+                hipChartInstance.options.plugins.playbackCursor.frame = null;
+                hipChartInstance.update('none');
+            }
             return;
         }
         updatePlaybackFrame(frame++);
@@ -473,14 +478,10 @@ function togglePlayback() {
     if (playbackAnimationId) {
         clearTimeout(playbackAnimationId);
         playbackAnimationId = null;
-        playButton.disabled = false;
         playButton.innerText = "Play 3D Reps";
-        if (hipChartInstance) {
-            hipChartInstance.options.plugins.playbackCursor.frame = null;
-            hipChartInstance.update('none');
-        }
     } else {
-        clearRepHighlight(); 
+        clearRepHighlight();
+        playButton.innerText = "Pause";
         startPlayback();
     }
 }
