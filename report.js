@@ -1,4 +1,3 @@
-// report.js
 
 import { analyzeSession, STANDING_THRESHOLD } from "./posedata.js";
 import { renderHipHeightChart } from "./chart.js";
@@ -10,11 +9,17 @@ const PLAYBACK_FPS = 30;
  * Updates the UI with detailed feedback for a specific metric.
  */
 function updateBreakdown(metric, score, weight, values) {
+    const breakdownItem = document.getElementById(`breakdown-item-${metric}`);
     const scoreEl = document.getElementById(`breakdown-score-${metric}`);
     const descEl = document.getElementById(`breakdown-desc-${metric}`);
-    scoreEl.innerText = `${Math.round(score)}/${weight}`;
-    let description = '';
+    const progressBar = breakdownItem.querySelector('.progress-bar');
 
+    scoreEl.innerText = `${Math.round(score)}/${weight}`;
+    
+    const scorePercentage = (score / weight) * 100;
+    progressBar.style.setProperty('--progress', `${scorePercentage}%`);
+
+    let description = '';
     const performanceTier = score / weight; // 0.0 to 1.0
 
     switch (metric) {
@@ -64,6 +69,7 @@ function updateBreakdown(metric, score, weight, values) {
     }
     descEl.innerText = description;
 }
+
 
 /**
  * Analyzes session data, calculates scores, and updates the report UI.
@@ -185,10 +191,6 @@ export function processAndRenderReport(sessionData) {
     // --- Chart Rendering ---
     const hipHeightChartCanvas = document.getElementById('hipHeightChart');
     const chartInstance = renderHipHeightChart(hipHeightChartCanvas, hipHeightData, symmetryData, valgusData);
-
-    playbackSlider.max = recordedWorldLandmarks.length - 1;
-    playbackSlider.value = 0;
-    playbackSlider.style.display = 'inline-block';
 
     // --- Return Processed Data ---
     return {
