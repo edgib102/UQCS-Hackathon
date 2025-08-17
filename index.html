@@ -5,15 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Squat Fix - Rep Master</title>
     
-    <!-- Tailwind CSS for modern styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Google Fonts: Poppins for UI, Space Mono for data -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     
-    <!-- Import map for Three.js -->
     <script type="importmap">
     {
         "imports": {
@@ -102,13 +99,11 @@
 <body class="text-gray-300">
 
     <div class="container mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
-        <!-- Header -->
         <header class="text-center mb-10">
             <h1 class="text-4xl sm:text-5xl font-bold text-gray-100 tracking-tight">Rep Master</h1>
             <p class="text-lg text-gray-400 mt-2">AI-Powered Squat Analysis</p>
         </header>
 
-        <!-- Start View -->
         <div id="startView">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
                 <div class="bg-gray-900 rounded-lg p-6 border border-gray-700">
@@ -138,10 +133,8 @@
             </div>
         </div>
 
-        <!-- Session View -->
         <div id="sessionView" style="display: none;">
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <!-- Main Content Column -->
                 <div class="lg:col-span-2 space-y-4">
                     <div class="relative w-full aspect-video bg-black rounded-lg overflow-hidden border border-gray-700" id="video-container">
                         <video id="video" class="w-full h-full" autoplay playsinline muted style="display: none;"></video>
@@ -151,18 +144,15 @@
                             <p class="text-lg font-medium">Processing video...</p>
                         </div>
                     </div>
-                    <!-- Status indicator moved below the video -->
                     <div class="text-center h-8">
                         <p id="rep-quality" class="font-data text-indigo-400 text-2xl lg:text-3xl font-bold transition-all duration-300">POSITIONING...</p>
                     </div>
                 </div>
-                <!-- Sidebar Column -->
                 <div class="space-y-6">
                     <div class="bg-gray-900 rounded-lg p-6 border border-gray-700">
                         <h3 class="text-lg font-bold text-white mb-4">Live Metrics</h3>
                         <div class="space-y-4">
-                             <!-- Status removed from here -->
-                            <div class="flex justify-between items-center bg-gray-800/50 p-3 rounded-md">
+                             <div class="flex justify-between items-center bg-gray-800/50 p-3 rounded-md">
                                 <span class="font-semibold text-sm text-gray-400">DEPTH</span>
                                 <p id="depth" class="font-data text-lg">N/A</p>
                             </div>
@@ -179,11 +169,9 @@
             </div>
         </div>
 
-        <!-- Report View -->
         <div id="reportView" style="display: none;">
             <div class="space-y-8">
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <!-- Left Column: Visuals -->
                     <div class="space-y-8">
                         <div class="bg-gray-900 rounded-lg p-6 border border-gray-700 flex flex-col sm:flex-row items-center sm:items-start gap-6">
                             <div class="text-center flex-shrink-0">
@@ -207,6 +195,9 @@
                                 <p class="absolute top-3 left-4 bg-black/50 text-white/80 text-xs font-semibold px-2 py-1 rounded-full z-10">3D PLAYBACK</p>
                                 <canvas id="playbackCanvas"></canvas>
                             </div>
+                            <div class="mt-4 px-2">
+                                <input type="range" id="playbackSlider" min="0" max="100" value="0" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                            </div>
                             <div class="flex items-center justify-center gap-x-6 gap-y-4 flex-wrap mt-4">
                                 <button id="playButton" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-5 rounded-md transition">Play 3D Reps</button>
                                 <div class="toggle-container flex items-center gap-3">
@@ -219,11 +210,9 @@
                             </div>
                         </div>
                     </div>
-                    <!-- Right Column: Analysis -->
                     <div class="bg-gray-900 rounded-lg p-6 border border-gray-700">
                         <h3 class="text-xl font-bold text-white mb-4">Score Breakdown & How to Improve</h3>
                         <div class="space-y-6">
-                            <!-- Depth Breakdown -->
                             <div class="breakdown-item" id="breakdown-item-depth">
                                 <div class="flex justify-between items-center mb-2">
                                     <h4 class="font-bold text-white">Depth</h4>
@@ -234,7 +223,6 @@
                                 </div>
                                 <p id="breakdown-desc-depth" class="text-sm text-gray-400 mt-2"></p>
                             </div>
-                            <!-- Symmetry Breakdown -->
                             <div class="breakdown-item" id="breakdown-item-symmetry">
                                 <div class="flex justify-between items-center mb-2">
                                     <h4 class="font-bold text-white">Symmetry</h4>
@@ -245,7 +233,6 @@
                                 </div>
                                 <p id="breakdown-desc-symmetry" class="text-sm text-gray-400 mt-2"></p>
                             </div>
-                            <!-- Knee Stability Breakdown -->
                             <div class="breakdown-item" id="breakdown-item-valgus">
                                 <div class="flex justify-between items-center mb-2">
                                     <h4 class="font-bold text-white">Knee Stability</h4>
@@ -256,7 +243,6 @@
                                 </div>
                                 <p id="breakdown-desc-valgus" class="text-sm text-gray-400 mt-2"></p>
                             </div>
-                            <!-- Consistency Breakdown -->
                             <div class="breakdown-item" id="breakdown-item-consistency">
                                 <div class="flex justify-between items-center mb-2">
                                     <h4 class="font-bold text-white">Consistency</h4>
@@ -268,7 +254,6 @@
                                 <p id="breakdown-desc-consistency" class="text-sm text-gray-400 mt-2"></p>
                             </div>
                         </div>
-                        <!-- Overall Summary Section -->
                         <div class="mt-6 pt-6 border-t border-gray-700">
                             <h4 class="text-lg font-bold text-white mb-2">Overall Summary</h4>
                             <p id="summary-text" class="text-sm text-gray-300"></p>
@@ -278,7 +263,6 @@
                     </div>
                 </div>
                 
-                <!-- Full-width Graph Section -->
                 <div class="bg-gray-900 rounded-lg p-6 border border-gray-700">
                     <div class="h-96 w-full">
                         <canvas id="hipHeightChart"></canvas>
@@ -300,10 +284,8 @@
         </div>
     </div>
 
-    <!-- ADDED: Toast Notification Element -->
     <div id="toast-notification"></div>
 
-    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
